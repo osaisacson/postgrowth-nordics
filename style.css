@@ -57,7 +57,7 @@ a { color: var(--accent); text-underline-offset: 2px; }
 #nav a:hover { color: var(--text); background: var(--chip); }
 #nav a[aria-current="page"] { color: var(--chip-text); background: var(--chip); font-weight: 600; }
 
-main { padding-top: 40px; padding-bottom: 64px; outline: none; }
+main { padding-top: 32px; padding-bottom: 64px; outline: none; }
 h1, h2, h3 { font-family: var(--serif); line-height: 1.25; margin: 0; }
 h1 { font-size: clamp(1.9rem, 4vw, 2.6rem); font-weight: 600; }
 h2 { font-size: 1.4rem; margin-bottom: 8px; }
@@ -118,3 +118,24 @@ h3 a:hover { text-decoration-color: var(--accent); }
 .notice { background: var(--notice); padding: 10px 14px; border-radius: 8px; font-size: .9rem; }
 
 .site-footer { border-top: 1px solid var(--line); color: var(--muted); font-size: .9rem; padding: 24px 0 40px; }
+
+/* About page */
+.about-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 40px; }
+@media (min-width: 900px) {
+  .about-layout { grid-template-columns: minmax(0, 1fr) 220px; }
+  .toc { position: sticky; top: 90px; align-self: start; }
+}
+@media (max-width: 899px) { .toc { display: none; } }
+.prose h2 { font-size: 1.6rem; margin: 28px 0 0; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.prose h3 { font-size: 1.35rem; margin: 32px 0 0; }
+.prose h4 { font-family: var(--serif); font-size: 1.1rem; margin: 24px 0 0; }
+.prose h2, .prose h3, .prose h4 { scroll-margin-top: 90px; }
+.prose ul { padding-left: 1.3em; }
+.prose li { margin: 4px 0; }
+.prose a { overflow-wrap: anywhere; }
+.toc-title { font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; margin: 8px 0; }
+.toc ul { list-style: none; margin: 0; padding: 0; border-left: 1px solid var(--line); }
+.toc button { font: inherit; font-size: .9rem; color: var(--muted); background: none; border: 0; cursor: pointer; text-align: left; padding: 4px 10px; line-height: 1.35; }
+.toc button:hover { color: var(--accent); }
+.toc-h3 button { padding-left: 18px; }
+.toc-h4 button { padding-left: 30px; }

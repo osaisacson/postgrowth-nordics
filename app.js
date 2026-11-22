@@ -147,12 +147,14 @@
       })
       .join("");
     $main().innerHTML = `
-      <section class="intro">
-        <h1>${esc(cfg.title)}</h1>
-        <p class="tagline">${esc(cfg.tagline || "")}</p>
-        <div class="prose">${cfg.intro || ""}</div>
-      </section>
-      <section class="overview">${cards}</section>
+      <div class="about-layout">
+        <article class="intro">
+          <h1>About</h1>
+          <div class="prose">${cfg.intro || ""}</div>
+        </article>
+        <aside class="toc" aria-label="On this page"></aside>
+      </div>
+      <section class="overview" aria-label="Sections">${cards}</section>
       <section class="contribute">
         <h2>Contribute</h2>
         <p>The site is built from a shared spreadsheet. Add a row to the right tab and it shows up here.</p>
@@ -160,6 +162,21 @@
           .map((s) => `<a class="button" href="${esc(addUrl(s))}" target="_blank" rel="noopener">${esc(s.addLabel || "Add to " + s.label)}</a>`)
           .join("")}</div>
       </section>`;
+    buildToc();
+  }
+
+  // "On this page" list built from the About headings. Uses buttons, since the URL hash is used for page routing.
+  function buildToc() {
+    const heads = [...$main().querySelectorAll(".prose h2, .prose h3, .prose h4")];
+    const toc = $main().querySelector(".toc");
+    if (!toc || heads.length < 2) { if (toc) toc.remove(); return; }
+    toc.innerHTML = `<p class="toc-title">On this page</p><ul>${heads
+      .map((h, i) => `<li class="toc-${h.tagName.toLowerCase()}"><button type="button" data-toc="${i}">${esc(h.textContent)}</button></li>`)
+      .join("")}</ul>`;
+    toc.addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-toc]");
+      if (b) heads[+b.dataset.toc].scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   }
 
   function entryHTML(section, row) {
