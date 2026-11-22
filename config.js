@@ -93,6 +93,13 @@ window.SITE_CONFIG = {
   // Footer text (HTML allowed).
   footer: `Content is community-maintained in an <a href="{sheetUrl}">open Google Sheet</a>.`,
 
+  // Shared "hub" values that link entries together, like tags in Obsidian.
+  // Every distinct value becomes its own page (e.g. #/topic/energy) and a dot in the graph.
+  hubs: {
+    topic: { label: "Topics", color: "#8a8f98" },
+    country: { label: "Countries", color: "#b07cc6" },
+  },
+
   sections: [
     {
       id: "library",
@@ -100,6 +107,7 @@ window.SITE_CONFIG = {
       tab: "Library",
       gid: "486577674",
       headerRow: 2,
+      color: "#4f7cc9",
       description: "Readings the network recommends.",
       addLabel: "Suggest a reading",
       layout: "list",
@@ -108,10 +116,16 @@ window.SITE_CONFIG = {
         url: "Url",
         subtitle: "Reference",
         body: "Citation",
-        note: "Connections to PGS (eg member authors)",
-        tags: "Concerned topics",
+        note: "Comments",
       },
-      filterBy: "Concerned topics",
+      // Relationship columns. Values can be several, separated by commas.
+      //   hub:     links entries that share a value (topics, countries)
+      //   section: links to an entry in another tab whose title matches the value
+      relations: [
+        { column: "Topics", hub: "topic" },
+        { column: "Connections to PGN (eg member authors)", section: "people", label: "Network members" },
+      ],
+      filterBy: "Topics",
     },
     {
       id: "nodes",
@@ -119,6 +133,7 @@ window.SITE_CONFIG = {
       tab: "Nodes",
       gid: "1999306781",
       headerRow: 2,
+      color: "#d0873f",
       description: "Organisations, groups and institutions that are part of the network.",
       addLabel: "Suggest a node",
       layout: "cards",
@@ -127,25 +142,32 @@ window.SITE_CONFIG = {
         url: "Url",
         body: "Comments",
       },
+      relations: [
+        { column: "Country", hub: "country" },
+      ],
+      filterBy: "Country",
     },
     {
       id: "people",
       label: "People",
       tab: "People",           // tab name in the sheet
-      gid: "1031118613",       // the number after #gid= when that tab is open (used for the "Add" link)
+      gid: "1031118613",       // the number after #gid= when that tab is open (used for the "Add" links)
       headerRow: 2,            // the row that holds the column names
       // approvedColumn: "Approved", // optional: only show rows where this checkbox column is ticked
+      color: "#3f8f6f",        // colour of these entries in the graph
       description: "People in the network and what they work on.",
       addLabel: "Add yourself",
       layout: "cards",
       fields: {
         title: "Name",
-        subtitle: "Affiliations",
         body: "Description",
-        tags: "Topics",
-        meta: ["Country"],
         links: "Links",
       },
+      relations: [
+        { column: "Affiliations", section: "nodes", label: "Affiliations" },
+        { column: "Topics", hub: "topic" },
+        { column: "Country", hub: "country" },
+      ],
       filterBy: "Topics",
     },
   ],

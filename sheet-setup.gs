@@ -1,0 +1,147 @@
+/**
+ * Sheet setup for the sheet-powered network site.
+ *
+ * What it does (it never deletes or changes any entries):
+ *  - Adds a "Lists" tab with the shared Topics and Countries, filled from what's already in the sheet.
+ *  - Adds dropdowns that pick from earlier entries:
+ *      People  → Topics (from Lists), Country (from Lists), Affiliations (from the Nodes tab)
+ *      Library → Topics (from Lists), Connections to PGN (from the People tab)
+ *      Nodes   → Country (from Lists)
+ *    New values are still allowed; they just get a small warning triangle.
+ *  - Checks that Url columns hold a web address and Email holds an email address.
+ *  - Adds a hint to every column header (hover the header to see it) and to the cells below it.
+ *  - Freezes the instruction and header rows so they stay visible.
+ *
+ * How to run it:
+ *  1. In the Google Sheet: Extensions → Apps Script.
+ *  2. Delete what's in the editor, paste this whole file, and press Save.
+ *  3. Pick "setUpSheet" in the function menu at the top and press Run.
+ *     Google asks you to allow the script to edit this spreadsheet the first time.
+ *  You can run it again whenever you add a column or change a hint; it replaces its own rules.
+ */
+
+const HEADER_ROW = 2;      // row with the column names
+const FIRST_DATA_ROW = 3;  // first row with entries
+const LISTS_TAB = "Lists";
+
+const DEFAULT_COUNTRIES = ["Denmark", "Faroe Islands", "Finland", "Greenland", "Iceland", "Norway", "Sweden", "Åland", "Other"];
+
+const MULTI = "Pick one or more. To add several, pick again or separate with commas.";
+
+// Column rules per tab. Column names must match the header row.
+//   list:  [tab, column]  dropdown that picks from that column's values
+//   url / email: format check (entries in the wrong format are rejected)
+//   hint:  text shown when hovering the header and when selecting a cell
+const RULES = {
+  People: {
+    "Name": { hint: "Full name, as you want it shown. Readings in the Library link to people by this name." },
+    "Affiliations": { list: ["Nodes", "Name"], hint: "Your organisation. Pick it from the Nodes tab so it gets linked, or type a new one. " + MULTI },
+    "Description": { hint: "One or two sentences about your work." },
+    "Topics": { list: [LISTS_TAB, "Topics"], hint: "What you work on. " + MULTI + " Missing a topic? Add it to the Lists tab first." },
+    "Email": { email: true, hint: "Your email address. It is NOT shown on the website." },
+    "Links": { hint: "Full web addresses starting with https:// (website, LinkedIn, ORCID…). Separate several with commas." },
+    "Country": { list: [LISTS_TAB, "Countries"], hint: "The country you're based in." },
+  },
+  Library: {
+    "Reference": { hint: "Short reference: Author et al., Year. For example: Kallis et al., 2025" },
+    "Title": { hint: "Full title of the publication." },
+    "Citation": { hint: "Full citation, APA style, ideally with the DOI." },
+    "Url": { url: true, hint: "Link to the publication, starting with https://" },
+    "Topics": { list: [LISTS_TAB, "Topics"], hint: "What the reading is about. " + MULTI + " Missing a topic? Add it to the Lists tab first." },
+    "Connections to PGN (eg member authors)": { list: ["People", "Name"], hint: "Network members connected to this reading, e.g. authors. Pick names from the People tab so they get linked. " + MULTI },
+    "Comments": { hint: "Anything else worth knowing about this reading." },
+  },
+  Nodes: {
+    "Name": { hint: "Name of the organisation, group or institution. People link to it by this name in their Affiliations." },
+    "Url": { url: true, hint: "Website, starting with https://" },
+    "Country": { list: [LISTS_TAB, "Countries"], hint: "Where it's based." },
+    "Comments": { hint: "A short description." },
+  },
+};
+
+function setUpSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  setUpLists_(ss);
+  for (const tabName of Object.keys(RULES)) {
+    const sheet = ss.getSheetByName(tabName);
+    if (!sheet) { Logger.log("Skipped missing tab: " + tabName); continue; }
+    sheet.setFrozenRows(HEADER_ROW);
+    sheet.getRange(HEADER_ROW, 1, 1, sheet.getLastColumn()).setFontWeight("bold");
+    const headers = headerMap_(sheet);
+    const rows = Math.max(1, sheet.getMaxRows() - FIRST_DATA_ROW + 1);
+    for (const [col, rule] of Object.entries(RULES[tabName])) {
+      const c = headers[norm_(col)];
+      if (!c) { Logger.log(`Skipped missing column "${col}" in ${tabName}`); continue; }
+      const cells = sheet.getRange(FIRST_DATA_ROW, c, rows, 1);
+      sheet.getRange(HEADER_ROW, c).setNote(rule.hint || "");
+      let v = null;
+      if (rule.list) {
+        const src = ss.getSheetByName(rule.list[0]);
+        const srcCol = src && headerMap_(src)[norm_(rule.list[1])];
+        if (!srcCol) { Logger.log(`No source column ${rule.list.join(" → ")}`); continue; }
+        const srcRange = src.getRange(FIRST_DATA_ROW, srcCol, Math.max(1, src.getMaxRows() - FIRST_DATA_ROW + 1), 1);
+        v = SpreadsheetApp.newDataValidation().requireValueInRange(srcRange, true).setAllowInvalid(true);
+      } else if (rule.url) {
+        v = SpreadsheetApp.newDataValidation().requireTextIsUrl().setAllowInvalid(false);
+      } else if (rule.email) {
+        v = SpreadsheetApp.newDataValidation().requireTextIsEmail().setAllowInvalid(false);
+      }
+      if (v) cells.setDataValidation(v.setHelpText(rule.hint || "").build());
+    }
+  }
+  SpreadsheetApp.getUi().alert(
+    "Done. One last manual step for the columns where people pick several values " +
+    "(People: Topics and Affiliations; Library: Topics and Connections to PGN): select the column, " +
+    "open Data → Data validation, click the rule, tick \"Allow multiple selections\", and press Done."
+  );
+}
+
+// Creates or tops up the Lists tab with every topic and country already used in the sheet.
+function setUpLists_(ss) {
+  let lists = ss.getSheetByName(LISTS_TAB);
+  if (!lists) {
+    lists = ss.insertSheet(LISTS_TAB);
+    lists.getRange(1, 1).setValue("Shared values for the dropdowns. Add a new topic or country at the bottom of its column.");
+    lists.getRange(HEADER_ROW, 1, 1, 2).setValues([["Topics", "Countries"]]).setFontWeight("bold");
+    lists.setFrozenRows(HEADER_ROW);
+  }
+  const h = headerMap_(lists);
+  const topics = new Set();
+  for (const [tab, col] of [["People", "Topics"], ["Library", "Topics"]]) collect_(ss, tab, col, topics);
+  const countries = new Set(DEFAULT_COUNTRIES);
+  for (const [tab, col] of [["People", "Country"], ["Nodes", "Country"]]) collect_(ss, tab, col, countries);
+  topUp_(lists, h["topics"], topics);
+  topUp_(lists, h["countries"], countries);
+}
+
+function collect_(ss, tab, col, into) {
+  const sheet = ss.getSheetByName(tab);
+  if (!sheet || sheet.getLastRow() < FIRST_DATA_ROW) return;
+  const c = headerMap_(sheet)[norm_(col)];
+  if (!c) return;
+  sheet.getRange(FIRST_DATA_ROW, c, sheet.getLastRow() - FIRST_DATA_ROW + 1, 1).getValues()
+    .forEach(([v]) => String(v).split(/[,;\n]/).map((s) => s.trim()).filter(Boolean).forEach((s) => into.add(s)));
+}
+
+function topUp_(sheet, col, values) {
+  if (!col) return;
+  const last = sheet.getLastRow();
+  const existing = last >= FIRST_DATA_ROW
+    ? sheet.getRange(FIRST_DATA_ROW, col, last - FIRST_DATA_ROW + 1, 1).getValues().map(([v]) => String(v).trim()).filter(Boolean)
+    : [];
+  const have = new Set(existing.map(norm_));
+  const add = [...values].filter((v) => !have.has(norm_(v))).sort((a, b) => a.localeCompare(b));
+  if (!add.length) return;
+  const start = FIRST_DATA_ROW + existing.length;
+  sheet.getRange(start, col, add.length, 1).setValues(add.map((v) => [v]));
+}
+
+function headerMap_(sheet) {
+  const lastCol = Math.max(1, sheet.getLastColumn());
+  const names = sheet.getRange(HEADER_ROW, 1, 1, lastCol).getValues()[0];
+  const map = {};
+  names.forEach((n, i) => { const k = norm_(n); if (k && !map[k]) map[k] = i + 1; });
+  return map;
+}
+
+function norm_(s) { return String(s || "").trim().replace(/\s+/g, " ").toLowerCase(); }

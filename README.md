@@ -9,6 +9,10 @@ Built for [Post-growth Nordics](https://postgrowthnordics.org), and made to be c
 ## How it works
 
 - Each **tab** in the Google Sheet is one **page** on the site (People, Library, Nodes…).
+- **Relationship columns** link entries together, Obsidian style: shared topics and countries,
+  people's affiliations to Nodes, and readings to the members connected to them. Every entry shows
+  its links and backlinks, every topic and country gets its own page, and a **graph** in the right-hand
+  column shows how everything connects (click a dot to open it, drag to move, scroll to zoom).
 - When someone visits, their browser downloads each tab as CSV straight from Google and draws it.
   Edits in the sheet appear on the site within about a minute.
 - Optionally, set `approvedColumn` to a checkbox column to hide rows until someone has ticked them.
@@ -18,6 +22,7 @@ Built for [Post-growth Nordics](https://postgrowthnordics.org), and made to be c
 - The last good copy of each tab is kept in the visitor's browser, so the site still shows something if Google is briefly unreachable.
 
 The whole site is four files: `index.html`, `style.css`, `app.js` and `config.js`.
+`sheet-setup.gs` is an optional helper for the Google Sheet (see below).
 
 ## Make your own copy (about 5 minutes)
 
@@ -55,12 +60,38 @@ Each section in `config.js` maps columns to parts of an entry:
 | `meta`     | Small grey details, e.g. country or date (a list of columns)   |
 | `body`     | Longer description                                             |
 | `note`     | Side note, e.g. connections to members                         |
-| `tags`     | Comma-separated topics, shown as clickable chips               |
 | `links`    | One or more web addresses, shown as short links                |
 | `answer`, `answerBy` | A reply box, used for questions                      |
 
-Set `filterBy` to a column of comma-separated values to show topic filters at the top of the page,
+Set `filterBy` to a column of comma-separated values to show filters at the top of the page,
 and `layout` to `"cards"` (grid) or `"list"` (one per line).
+
+### Relationships
+
+Each section can list `relations`, columns whose values (comma-separated) connect entries:
+
+```js
+relations: [
+  { column: "Topics", hub: "topic" },          // entries sharing a topic are linked through it
+  { column: "Country", hub: "country" },
+  { column: "Affiliations", section: "nodes", label: "Affiliations" }, // links to the Nodes entry with that name
+],
+```
+
+- `hub` values become shared dots in the graph and pages like `#/topic/energy`. Hubs are declared in `hubs` at the top of `config.js`.
+- `section` values link to the entry in that tab whose title matches exactly (upper/lower case doesn't matter).
+  Values that don't match anything are shown as plain text.
+
+## Helping people enter data in the right format
+
+`sheet-setup.gs` adds dropdowns that pick from earlier entries (topics, countries, people, nodes),
+format checks for web and email addresses, and a hint on every column. It also creates a **Lists**
+tab that holds the shared topics and countries. It never changes or deletes entries. To use it:
+
+1. In the sheet, open **Extensions → Apps Script**, paste in the file, and press Save.
+2. Choose `setUpSheet` in the menu at the top and press **Run**. Allow it to edit the sheet when Google asks.
+3. For the columns where people pick several values, open **Data → Data validation**, click the rule,
+   and tick **Allow multiple selections** (Google doesn't let scripts set this one).
 
 ## Run it on your computer
 
@@ -74,7 +105,7 @@ Then open http://localhost:8000.
 
 ## Changing the look
 
-All colours are at the top of `style.css`, with a light and a dark set. Change those and the whole site follows.
+All colours are at the top of `style.css`; the graph colours for each section and hub are in `config.js`.
 
 ## License
 
