@@ -8,10 +8,10 @@ Built for [Post-growth Nordics](https://postgrowthnordics.org), and made to be c
 
 ## How it works
 
-- Each **tab** in the Google Sheet is one **page** on the site (People, Library, Nodes, Questions…).
+- Each **tab** in the Google Sheet is one **page** on the site (People, Library, Nodes…).
 - When someone visits, their browser downloads each tab as CSV straight from Google and draws it.
   Edits in the sheet appear on the site within about a minute.
-- An optional **Approved** checkbox column lets you hide a row until someone has looked at it.
+- Optionally, set `approvedColumn` to a checkbox column to hide rows until someone has ticked them.
 - Columns that aren't listed in the config (helper columns, emails, notes) are never shown.
 - Anything typed into the sheet is shown as plain text, so nobody can inject scripts or odd links through it.
 - If someone messes up the sheet, use **File → Version history** in Google Sheets to go back.

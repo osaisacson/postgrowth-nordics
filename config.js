@@ -100,7 +100,6 @@ window.SITE_CONFIG = {
       tab: "Library",
       gid: "486577674",
       headerRow: 2,
-      approvedColumn: "Approved",
       description: "Readings the network recommends.",
       addLabel: "Suggest a reading",
       layout: "list",
@@ -120,7 +119,6 @@ window.SITE_CONFIG = {
       tab: "Nodes",
       gid: "1999306781",
       headerRow: 2,
-      approvedColumn: "Approved",
       description: "Organisations, groups and institutions that are part of the network.",
       addLabel: "Suggest a node",
       layout: "cards",
@@ -136,7 +134,7 @@ window.SITE_CONFIG = {
       tab: "People",           // tab name in the sheet
       gid: "1031118613",       // the number after #gid= when that tab is open (used for the "Add" link)
       headerRow: 2,            // the row that holds the column names
-      approvedColumn: "Approved", // only rows with this box ticked are shown; remove the line to show all rows
+      // approvedColumn: "Approved", // optional: only show rows where this checkbox column is ticked
       description: "People in the network and what they work on.",
       addLabel: "Add yourself",
       layout: "cards",
@@ -149,23 +147,6 @@ window.SITE_CONFIG = {
         links: "Links",
       },
       filterBy: "Topics",
-    },
-    {
-      id: "questions",
-      label: "Questions",
-      tab: "Questions/Suggestions",
-      gid: "931020946",
-      headerRow: 2,
-      description: "Open questions and suggestions for the network.",
-      addLabel: "Ask or suggest something",
-      emptyText: "No questions yet. Be the first to ask one.",
-      layout: "list",
-      fields: {
-        title: "Question/Suggestion",
-        meta: ["By", "Added on"],
-        answer: "Answer",
-        answerBy: "Answered by",
-      },
     },
   ],
 };
