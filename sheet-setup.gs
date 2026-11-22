@@ -111,11 +111,11 @@ function setUpSheet() {
     }
   }
   installGrowTrigger_(ss);
-  SpreadsheetApp.getUi().alert(
-    "Done. One last manual step for the columns where people pick several values " +
+  const done = "Done. One last manual step for the columns where people pick several values " +
     "(People: Topics and Affiliations; Library: Topics and Connections to PGN): select the column, " +
-    "open Data → Data validation, click the rule, tick \"Allow multiple selections\", and press Done."
-  );
+    "open Data → Data validation, click the rule, tick \"Allow multiple selections\", and press Done.";
+  Logger.log(done);
+  try { SpreadsheetApp.getUi().alert(done); } catch (err) { /* run from the editor: the log has it */ }
 }
 
 // Creates or tops up the Lists tab with every topic and country already used in the sheet.
