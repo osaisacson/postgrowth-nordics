@@ -90,7 +90,8 @@ offers them from then on. It never changes or deletes entries. To use it:
 1. In the sheet, open **Extensions → Apps Script**, paste in the file, and press Save.
 2. Choose `setUpSheet` in the menu at the top and press **Run**. Allow it to edit the sheet when Google asks.
 3. For the columns where people pick several values, open **Data → Data validation**, click the rule,
-   and tick **Allow multiple selections** (Google doesn't let scripts set this one).
+   open **Advanced options**, set the display style to **Chip**, then tick **Allow multiple selections**
+   (Google doesn't let scripts set this one, and it only appears for chips).
 
 ## Run it on your computer
 

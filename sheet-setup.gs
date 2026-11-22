@@ -113,7 +113,7 @@ function setUpSheet() {
   installGrowTrigger_(ss);
   const done = "Done. One last manual step for the columns where people pick several values " +
     "(People: Topics and Affiliations; Library: Topics and Connections to PGN): select the column, " +
-    "open Data → Data validation, click the rule, tick \"Allow multiple selections\", and press Done.";
+    "open Data → Data validation, click the rule, set Advanced options → Display style to Chip, tick \"Allow multiple selections\", and press Done.";
   Logger.log(done);
   try { SpreadsheetApp.getUi().alert(done); } catch (err) { /* run from the editor: the log has it */ }
 }
