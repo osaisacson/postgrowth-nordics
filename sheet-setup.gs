@@ -7,7 +7,11 @@
  *      People  → Topics (from Lists), Country (from Lists), Affiliations (from the Nodes tab)
  *      Library → Topics (from Lists), Connections to PGN (from the People tab)
  *      Nodes   → Country (from Lists)
- *    New values are still allowed; they just get a small warning triangle.
+ *    New values are still allowed: type them straight into the cell.
+ *  - Keeps the shared lists growing by themselves: a new topic typed into any Topics column, or a
+ *    new country into any Country column, is added to the Lists tab, so it shows up in every
+ *    Topics/Country dropdown from then on. A new organisation typed into a person's Affiliations
+ *    is added to the Nodes tab (with the person's country), so it gets its own page and link.
  *  - Checks that Url columns hold a web address and Email holds an email address.
  *  - Adds a hint to every column header (hover the header to see it) and to the cells below it.
  *  - Freezes the instruction and header rows so they stay visible.
@@ -17,7 +21,12 @@
  *  2. Delete what's in the editor, paste this whole file, and press Save.
  *  3. Pick "setUpSheet" in the function menu at the top and press Run.
  *     Google asks you to allow the script to edit this spreadsheet the first time.
- *  You can run it again whenever you add a column or change a hint; it replaces its own rules.
+ *  You can run it again whenever you add a column or change a hint; it replaces its own rules
+ *  and never adds the automatic list-growing twice.
+ *
+ *  The list-growing runs as an "installable trigger", so it works for everyone who edits the
+ *  sheet, including people who aren't signed in. You can see or remove it under Triggers (the
+ *  clock icon) in the Apps Script editor.
  */
 
 const HEADER_ROW = 2;      // row with the column names
@@ -32,22 +41,34 @@ const MULTI = "Pick one or more. To add several, pick again or separate with com
 //   list:  [tab, column]  dropdown that picks from that column's values
 //   url / email: format check (entries in the wrong format are rejected)
 //   hint:  text shown when hovering the header and when selecting a cell
+// Columns that feed a shared list. When someone types a new value into one of these,
+// it is added to the list so every dropdown that uses the list offers it from then on.
+//   to: [tab, column] the list it is added to
+//   copy: other columns copied onto the new row, as { fromColumn: toColumn }
+const GROW = [
+  { tab: "People", column: "Topics", to: [LISTS_TAB, "Topics"] },
+  { tab: "Library", column: "Topics", to: [LISTS_TAB, "Topics"] },
+  { tab: "People", column: "Country", to: [LISTS_TAB, "Countries"] },
+  { tab: "Nodes", column: "Country", to: [LISTS_TAB, "Countries"] },
+  { tab: "People", column: "Affiliations", to: ["Nodes", "Name"], copy: { "Country": "Country" } },
+];
+
 const RULES = {
   People: {
     "Name": { hint: "Full name, as you want it shown. Readings in the Library link to people by this name." },
-    "Affiliations": { list: ["Nodes", "Name"], hint: "Your organisation. Pick it from the Nodes tab so it gets linked, or type a new one. " + MULTI },
+    "Affiliations": { list: ["Nodes", "Name"], hint: "Your organisation. Pick it from the list, or type a new one and it is added to the Nodes tab. " + MULTI },
     "Description": { hint: "One or two sentences about your work." },
-    "Topics": { list: [LISTS_TAB, "Topics"], hint: "What you work on. " + MULTI + " Missing a topic? Add it to the Lists tab first." },
-    "Email": { email: true, hint: "Your email address. It is NOT shown on the website." },
+    "Topics": { list: [LISTS_TAB, "Topics"], hint: "What you work on. " + MULTI + " Missing a topic? Just type it; it is added to the shared list for everyone." },
+    "Email": { email: true, hint: "Your email address. It is shown on the website so people can contact you." },
     "Links": { hint: "Full web addresses starting with https:// (website, LinkedIn, ORCID…). Separate several with commas." },
-    "Country": { list: [LISTS_TAB, "Countries"], hint: "The country you're based in." },
+    "Country": { list: [LISTS_TAB, "Countries"], hint: "The country you're based in. Pick one, or type a new one." },
   },
   Library: {
     "Reference": { hint: "Short reference: Author et al., Year. For example: Kallis et al., 2025" },
     "Title": { hint: "Full title of the publication." },
     "Citation": { hint: "Full citation, APA style, ideally with the DOI." },
     "Url": { url: true, hint: "Link to the publication, starting with https://" },
-    "Topics": { list: [LISTS_TAB, "Topics"], hint: "What the reading is about. " + MULTI + " Missing a topic? Add it to the Lists tab first." },
+    "Topics": { list: [LISTS_TAB, "Topics"], hint: "What the reading is about. " + MULTI + " Missing a topic? Just type it; it is added to the shared list for everyone." },
     "Connections to PGN (eg member authors)": { list: ["People", "Name"], hint: "Network members connected to this reading, e.g. authors. Pick names from the People tab so they get linked. " + MULTI },
     "Comments": { hint: "Anything else worth knowing about this reading." },
   },
@@ -89,6 +110,7 @@ function setUpSheet() {
       if (v) cells.setDataValidation(v.setHelpText(rule.hint || "").build());
     }
   }
+  installGrowTrigger_(ss);
   SpreadsheetApp.getUi().alert(
     "Done. One last manual step for the columns where people pick several values " +
     "(People: Topics and Affiliations; Library: Topics and Connections to PGN): select the column, " +
@@ -145,3 +167,63 @@ function headerMap_(sheet) {
 }
 
 function norm_(s) { return String(s || "").trim().replace(/\s+/g, " ").toLowerCase(); }
+
+// ---------- keeping the shared lists growing ----------
+
+function installGrowTrigger_(ss) {
+  const exists = ScriptApp.getProjectTriggers().some((t) => t.getHandlerFunction() === "growLists");
+  if (!exists) ScriptApp.newTrigger("growLists").forSpreadsheet(ss).onEdit().create();
+}
+
+// Runs after every edit. Adds new values from the GROW columns to their lists.
+function growLists(e) {
+  if (!e || !e.range) return;
+  const sheet = e.range.getSheet();
+  const rules = GROW.filter((g) => g.tab === sheet.getName());
+  if (!rules.length || e.range.getLastRow() < FIRST_DATA_ROW) return;
+  const headers = headerMap_(sheet);
+  const ss = sheet.getParent();
+  const lock = LockService.getDocumentLock();
+  if (!lock.tryLock(10000)) return;
+  try {
+    for (const g of rules) {
+      const c = headers[norm_(g.column)];
+      if (!c || c < e.range.getColumn() || c > e.range.getLastColumn()) continue;
+      const top = Math.max(FIRST_DATA_ROW, e.range.getRow());
+      const n = e.range.getLastRow() - top + 1;
+      const target = ss.getSheetByName(g.to[0]);
+      const tCol = target && headerMap_(target)[norm_(g.to[1])];
+      if (!tCol || n < 1) continue;
+      const values = sheet.getRange(top, c, n, 1).getValues();
+      const copyCols = Object.entries(g.copy || {}).map(([from, to]) => [headers[norm_(from)], headerMap_(target)[norm_(to)]]).filter(([a, b]) => a && b);
+      const copyVals = copyCols.map(([from]) => sheet.getRange(top, from, n, 1).getValues());
+      values.forEach(([cell], i) => {
+        const extras = copyCols.map(([, to], k) => [to, copyVals[k][i][0]]);
+        String(cell).split(/[,;\n]/).map((v) => v.trim()).filter(Boolean)
+          .forEach((v) => addToList_(target, tCol, v, extras));
+      });
+      if (target.getName() === LISTS_TAB) sortListColumn_(target, tCol);
+    }
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function addToList_(sheet, col, value, extras) {
+  const last = sheet.getLastRow();
+  const existing = last >= FIRST_DATA_ROW ? sheet.getRange(FIRST_DATA_ROW, col, last - FIRST_DATA_ROW + 1, 1).getValues() : [];
+  if (existing.some(([v]) => norm_(v) === norm_(value))) return;
+  let row = FIRST_DATA_ROW;
+  while (row - FIRST_DATA_ROW < existing.length && String(existing[row - FIRST_DATA_ROW][0]).trim()) row++;
+  sheet.getRange(row, col).setValue(value);
+  for (const [c, v] of extras || []) if (v !== "" && !sheet.getRange(row, c).getValue()) sheet.getRange(row, c).setValue(v);
+}
+
+function sortListColumn_(sheet, col) {
+  const last = sheet.getLastRow();
+  if (last < FIRST_DATA_ROW) return;
+  const range = sheet.getRange(FIRST_DATA_ROW, col, last - FIRST_DATA_ROW + 1, 1);
+  const vals = range.getValues().map(([v]) => String(v).trim()).filter(Boolean).sort((a, b) => a.localeCompare(b));
+  range.clearContent();
+  if (vals.length) sheet.getRange(FIRST_DATA_ROW, col, vals.length, 1).setValues(vals.map((v) => [v]));
+}

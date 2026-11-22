@@ -83,7 +83,9 @@ relations: [
 
 `sheet-setup.gs` adds dropdowns that pick from earlier entries (topics, countries, people, nodes),
 format checks for web and email addresses, and a hint on every column. It also creates a **Lists**
-tab that holds the shared topics and countries. It never changes or deletes entries. To use it:
+tab that holds the shared topics and countries. New values typed into a Topics or Country column
+are added to that tab automatically (and new affiliations to the Nodes tab), so every dropdown
+offers them from then on. It never changes or deletes entries. To use it:
 
 1. In the sheet, open **Extensions → Apps Script**, paste in the file, and press Save.
 2. Choose `setUpSheet` in the menu at the top and press **Run**. Allow it to edit the sheet when Google asks.
