@@ -124,6 +124,13 @@ window.SITE_CONFIG = {
     country: { label: "Countries", color: "#2f7d55" },
   },
 
+  /*
+   * One entry per page. `column` always means the column name in the sheet (header row);
+   * `label` is what the site shows. Labels are set here, not taken from the sheet,
+   * so editing a header in the sheet never changes the site. If you rename a column
+   * in the sheet, update its `column` here to match.
+   */
+  // Table columns can take a `width` so tables in different groups line up.
   sections: [
     {
       id: "library",
@@ -132,24 +139,34 @@ window.SITE_CONFIG = {
       gid: "486577674",
       headerRow: 2,
       color: "#1f5c40",
-      description: "Readings the network recommends.",
-      addLabel: "Suggest a reading",
-      layout: "list",
-      fields: {
-        title: "Title",
-        url: "Url",
-        subtitle: "Reference",
-        body: "Citation",
-        note: "Comments",
-      },
+      title: "Reference",                     // the column that names each item
+      addText: "Suggest additional materials", // followed by "here ↗"
+      searchPlaceholder: "Search by title, topic, year…",
+      table: [
+        { label: "Name", column: "Reference", width: "22%" },
+        { label: "Title", column: "Title", width: "46%" },
+        { label: "Topics", column: "Topics", chips: true },
+      ],
+      groups: [
+        { label: "Alphabetically" },
+        { label: "Topics", column: "Topics" },
+      ],
+      // the box on an item's own page
+      properties: [
+        { label: "Title", column: "Title" },
+        { label: "Citation", column: "Citation" },
+        { label: "Link", column: "Url", url: true },
+        { label: "Topics", column: "Topics" },
+        { label: "Network members", column: "Connections to PGN (eg member authors)" },
+      ],
+      description: "Comments",                 // shown as text under the box
       // Relationship columns. Values can be several, separated by commas.
       //   hub:     links entries that share a value (topics, countries)
-      //   section: links to an entry in another tab whose title matches the value
+      //   section: links to the entry in another tab whose name matches the value
       relations: [
         { column: "Topics", hub: "topic" },
-        { column: "Connections to PGN (eg member authors)", section: "people", label: "Network members" },
+        { column: "Connections to PGN (eg member authors)", section: "people" },
       ],
-      filterBy: "Topics",
     },
     {
       id: "nodes",
@@ -158,41 +175,57 @@ window.SITE_CONFIG = {
       gid: "1999306781",
       headerRow: 2,
       color: "#43a06b",
-      description: "Organisations, groups and institutions that are part of the network.",
-      addLabel: "Suggest a node",
-      layout: "cards",
-      fields: {
-        title: "Name",
-        url: "Url",
-        body: "Comments",
-      },
+      title: "Name",
+      addText: "Suggest additional nodes",
+      searchPlaceholder: "Search nodes…",
+      list: true,                              // a plain list instead of a table
+      groups: [{ label: "Country", column: "Country" }],
+      properties: [
+        { label: "Country", column: "Country" },
+        { label: "Website", column: "Url", url: true },
+      ],
+      description: "Comments",
       relations: [
         { column: "Country", hub: "country" },
       ],
-      filterBy: "Country",
     },
     {
       id: "people",
       label: "People",
       tab: "People",           // tab name in the sheet
-      gid: "1031118613",       // the number after #gid= when that tab is open (used for the "Add" links)
+      gid: "1031118613",       // the number after #gid= when that tab is open (used for the "here" links)
       headerRow: 2,            // the row that holds the column names
       // approvedColumn: "Approved", // optional: only show rows where this checkbox column is ticked
       color: "#79c08f",        // colour of these entries in the graph (all greens)
-      description: "People in the network and what they work on.",
-      addLabel: "Add yourself",
-      layout: "cards",
-      fields: {
-        title: "Name",
-        body: "Description",
-        links: "Links",
-      },
+      title: "Name",
+      addText: "Want to join this table? Add yourself",
+      searchPlaceholder: "Search by name, country, affiliation, topic…",
+      table: [
+        { label: "Name", column: "Name", width: "19%" },
+        { label: "Country", column: "Country", width: "12%" },
+        { label: "Affiliations", column: "Affiliations", width: "20%" },
+        { label: "Topics", column: "Topics", chips: true },
+        { label: "Email", column: "Email", width: "21%" },
+      ],
+      groups: [
+        { label: "Country", column: "Country" },
+        { label: "Affiliation", column: "Affiliations" },
+        { label: "Topics", column: "Topics" },
+        { label: "Alphabetically" },
+      ],
+      properties: [
+        { label: "Country", column: "Country" },
+        { label: "Affiliations", column: "Affiliations" },
+        { label: "Topics", column: "Topics" },
+        { label: "Email", column: "Email", email: true },
+        { label: "Links", column: "Links", url: true },
+      ],
+      description: "Description",
       relations: [
-        { column: "Affiliations", section: "nodes", label: "Affiliations" },
+        { column: "Affiliations", section: "nodes" },
         { column: "Topics", hub: "topic" },
         { column: "Country", hub: "country" },
       ],
-      filterBy: "Topics",
     },
   ],
 };

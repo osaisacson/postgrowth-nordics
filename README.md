@@ -52,21 +52,16 @@ The site expects:
 - The column names in the header row. They must match the names in `config.js` (upper/lower case doesn't matter).
 - One entry per row. Rows with an empty title column are skipped.
 
-Each section in `config.js` maps columns to parts of an entry:
+Each section in `config.js` says what the site shows. Headers on the site are set there, never read
+from the sheet, so editing a header in the sheet can't change the site. Only the cell contents come live.
 
-| Setting    | What it shows                                                  |
-|------------|----------------------------------------------------------------|
-| `title`    | Heading of the entry (required)                                |
-| `url`      | Makes the heading a link                                       |
-| `subtitle` | Line under the heading, e.g. affiliation                       |
-| `meta`     | Small grey details, e.g. country or date (a list of columns)   |
-| `body`     | Longer description                                             |
-| `note`     | Side note, e.g. connections to members                         |
-| `links`    | One or more web addresses, shown as short links                |
-| `answer`, `answerBy` | A reply box, used for questions                      |
-
-Set `filterBy` to a column of comma-separated values to show filters at the top of the page,
-and `layout` to `"cards"` (grid) or `"list"` (one per line).
+- `title`: the column that names each item (its page title and graph label).
+- `table`: the columns of the list page, each `{ label, column }`. Add `chips: true` for topic pills and
+  `width` to keep columns aligned between groups. Set `list: true` instead for a plain list.
+- `groups`: the "Group" buttons above the table, e.g. `{ label: "Country", column: "Country" }`, or
+  `{ label: "Alphabetically" }` for one ungrouped table. The first one is the default.
+- `properties`: the rows of the box on an item's own page. Add `url: true` or `email: true` for links.
+- `description`: the column shown as text under that box.
 
 ### Relationships
 

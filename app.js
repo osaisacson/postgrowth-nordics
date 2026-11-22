@@ -13,7 +13,7 @@
   const CACHE_PREFIX = "sheet-site:v2:";
   const hubs = cfg.hubs || {};
   const data = {}; // section id -> { rows, error, loading, stale }
-  const ui = {}; // section id -> { query, tag }
+  const ui = {}; // section id -> { query, group }
   let graph = { nodes: new Map(), links: [], adj: new Map() };
 
   // ---------- helpers ----------
@@ -101,7 +101,7 @@
 
   function prepare(section, rows) {
     return rows.filter((r) => {
-      if (!get(r, section.fields.title)) return false;
+      if (!get(r, section.title)) return false;
       if (section.approvedColumn && !isTrue(get(r, section.approvedColumn))) return false;
       return true;
     });
@@ -152,7 +152,7 @@
     for (const s of cfg.sections) {
       byTitle[s.id] = {};
       for (const row of (data[s.id] || { rows: [] }).rows) {
-        const title = get(row, s.fields.title);
+        const title = get(row, s.title);
         let id = `${s.id}/${slug(title)}`;
         for (let n = 2; nodes.has(id); n++) id = `${s.id}/${slug(title)}-${n}`;
         row.__id = id;
@@ -212,12 +212,24 @@
     return { ids: [...graph.nodes.keys()], links: graph.links.map((l) => [l.source, l.target]) };
   }
 
-  // ---------- graph drawing (small force layout in SVG) ----------
+  // ---------- graph drawing (SVG) ----------
+  // Item pages use a tidy radial layout: the item in the middle, what it links to evenly around it.
+  // The full map uses a force layout with rings by distance from the centre node.
 
   function hashRand(str) {
     let h = 2166136261;
     for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
     return ((h >>> 0) % 100000) / 100000;
+  }
+
+  function depthsFrom(root) {
+    const depth = new Map([[root, 0]]);
+    const q = [root];
+    while (q.length) {
+      const id = q.shift();
+      for (const nb of graph.adj.get(id) || []) if (!depth.has(nb)) { depth.set(nb, depth.get(id) + 1); q.push(nb); }
+    }
+    return depth;
   }
 
   function drawGraph(box, view, opts = {}) {
@@ -226,17 +238,35 @@
     if (ids.length < 2) { box.innerHTML = `<p class="graph-empty">Nothing linked here yet.</p>`; return () => {}; }
 
     const W = Math.max(200, box.clientWidth || 300), H = Math.max(200, box.clientHeight || 300);
-    const nodes = ids.map((id) => {
-      const n = graph.nodes.get(id);
-      const a = hashRand(id) * Math.PI * 2, r = 30 + hashRand(id + "r") * 120;
-      return { ...n, x: Math.cos(a) * r, y: Math.sin(a) * r, vx: 0, vy: 0, deg: graph.adj.get(id).size };
-    });
+    const nodes = ids.map((id) => ({ ...graph.nodes.get(id), x: 0, y: 0, vx: 0, vy: 0, deg: graph.adj.get(id).size }));
     const index = new Map(nodes.map((n, i) => [n.id, i]));
     const links = view.links.filter(([a, b]) => index.has(a) && index.has(b))
       .map(([a, b]) => ({ s: nodes[index.get(a)], t: nodes[index.get(b)] }));
     const nb = new Map(nodes.map((n) => [n.id, new Set()]));
     links.forEach((l) => { nb.get(l.s.id).add(l.t.id); nb.get(l.t.id).add(l.s.id); });
     const center = opts.center && nodes[index.get(opts.center)];
+    const radial = !opts.full;
+
+    // target positions
+    if (radial) {
+      const ring = nodes.filter((n) => n !== center);
+      // parents first (top), then children clockwise
+      ring.sort((a, b) => (view.faded?.has(b.id) ? 1 : 0) - (view.faded?.has(a.id) ? 1 : 0) || a.label.localeCompare(b.label));
+      const R = 100 + Math.max(0, ring.length - 6) * 8;
+      ring.forEach((n, i) => {
+        const a = -Math.PI / 2 + (i / ring.length) * Math.PI * 2;
+        n.tx = Math.cos(a) * R; n.ty = Math.sin(a) * R * (ring.length > 2 ? 1 : 0.6);
+      });
+      if (center) { center.tx = 0; center.ty = 0; }
+    } else {
+      const depth = depthsFrom(HOME);
+      const maxD = Math.max(1, ...depth.values());
+      nodes.forEach((n) => {
+        n.ring = depth.has(n.id) ? depth.get(n.id) : maxD + 1;
+        const a = hashRand(n.id) * Math.PI * 2;
+        n.x = Math.cos(a) * n.ring * 90; n.y = Math.sin(a) * n.ring * 90;
+      });
+    }
 
     const NS = "http://www.w3.org/2000/svg";
     const el = (tag, attrs = {}) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
@@ -247,8 +277,8 @@
     viewG.append(gl, gn);
     svg.appendChild(viewG);
 
-    const lineEls = links.map(() => gl.appendChild(el("line")));
-    const showAllLabels = nodes.length <= 40;
+    const lineEls = links.map((l) => gl.appendChild(el("line", { class: view.faded?.has(l.s.id) || view.faded?.has(l.t.id) ? "is-faded" : "" })));
+    const textEls = [];
     const nodeEls = nodes.map((n) => {
       const g = el("g", { class: `g-node k-${n.kind}` + (n === center ? " is-center" : "") + (view.faded?.has(n.id) ? " is-faded" : "") });
       if (n.id === HOME) {
@@ -256,12 +286,12 @@
         n.r = 15;
         g.append(el("circle", { r: 15, class: "home-halo" }), el("circle", { r: 11.5, class: "home-ring" }), el("circle", { r: 6, class: "home-core" }));
       } else {
-        n.r = (n.hub ? 3.5 : 4.5) + Math.min(6, Math.sqrt(n.deg) * 1.4) + (n === center ? 2 : 0);
+        n.r = n === center ? 9 : (n.hub ? 4.5 : 5.5) + (opts.full ? Math.min(5, Math.sqrt(n.deg)) : 0);
         g.append(el("circle", { r: n.r, fill: colorOf(n.kind) }));
       }
-      const t = el("text", { y: n.r + 12 });
-      t.textContent = n.label.length > 30 ? n.label.slice(0, 28) + "…" : n.label;
-      if (!showAllLabels && n !== center && n.id !== HOME && n.deg < 4) g.classList.add("label-hidden");
+      const t = el("text");
+      t.textContent = n.label.length > 26 ? n.label.slice(0, 24) + "…" : n.label;
+      textEls.push(t);
       const title = el("title"); title.textContent = n.label;
       g.append(t, title);
       gn.appendChild(g);
@@ -269,43 +299,74 @@
     });
     box.appendChild(svg);
 
+    // labels sit centred under their dot and keep the same on-screen size at any zoom (see applyView)
+    function placeLabel(n, t) {
+      t.setAttribute("text-anchor", "middle");
+      t.setAttribute("x", 0);
+      t.setAttribute("y", n.r + 12);
+    }
+    nodes.forEach((n, i) => placeLabel(n, textEls[i]));
+
     let scale = 1, tx = 0, ty = 0, userView = false;
-    let alpha = 1, raf = 0, dragging = null;
-    const spring = opts.full ? 90 : 85;
-    function tick() {
+    let alpha = 1, raf = 0, dragging = null, t0 = performance.now();
+
+    function forceTick() {
       const k = alpha;
       for (let i = 0; i < nodes.length; i++) {
         const a = nodes[i];
         for (let j = i + 1; j < nodes.length; j++) {
           const b = nodes[j];
           let dx = a.x - b.x, dy = a.y - b.y, d2 = dx * dx + dy * dy || 0.01;
-          if (d2 > 160000) continue;
-          const f = ((opts.full ? 5200 : 2400) / d2) * k, d = Math.sqrt(d2);
+          const d = Math.sqrt(d2);
           dx /= d; dy /= d;
+          let f = d2 < 250000 ? (4500 / d2) * k : 0;
+          const minGap = a.r + b.r + 36;                      // keep dots (and their labels) apart
+          if (d < minGap) f += (minGap - d) * 0.5;
           a.vx += dx * f; a.vy += dy * f; b.vx -= dx * f; b.vy -= dy * f;
         }
       }
       for (const l of links) {
         const dx = l.t.x - l.s.x, dy = l.t.y - l.s.y, d = Math.sqrt(dx * dx + dy * dy) || 0.01;
-        const f = ((d - spring) / d) * 0.06 * k;
+        const f = ((d - 70) / d) * 0.03 * k;                 // soft springs
         l.s.vx += dx * f; l.s.vy += dy * f; l.t.vx -= dx * f; l.t.vy -= dy * f;
       }
       for (const n of nodes) {
-        n.vx -= n.x * 0.01 * k; n.vy -= n.y * 0.01 * k * Math.min(2, W / H);
+        // pull each dot towards its ring (distance from the centre node)
+        const d = Math.hypot(n.x, n.y) || 0.01, want = n.ring * 125;
+        const f = ((want - d) / d) * 0.3 * k;
+        n.vx += n.x * f; n.vy += n.y * f;
+        if (n.id === HOME) { n.x = n.y = n.vx = n.vy = 0; continue; }
         if (n === dragging) { n.vx = n.vy = 0; continue; }
-        if (n === center) { n.x *= 0.8; n.y *= 0.8; n.vx = n.vy = 0; continue; }
-        n.vx *= 0.6; n.vy *= 0.6;
-        n.x += Math.max(-20, Math.min(20, n.vx)); n.y += Math.max(-20, Math.min(20, n.vy));
+        n.vx *= 0.55; n.vy *= 0.55;
+        n.x += Math.max(-15, Math.min(15, n.vx)); n.y += Math.max(-15, Math.min(15, n.vy));
       }
-      alpha *= 0.985;
+      alpha *= 0.98;
     }
-    const applyView = () => viewG.setAttribute("transform", `translate(${tx},${ty}) scale(${scale})`);
+    function radialTick() {
+      const p = Math.min(1, (performance.now() - t0) / 450);
+      const e = 1 - Math.pow(1 - p, 3);
+      for (const n of nodes) if (n !== dragging && !n.moved) { n.x = n.tx * e; n.y = n.ty * e; }
+      alpha = p < 1 ? 1 : 0;
+    }
+    const tick = radial ? radialTick : forceTick;
+
+    const applyView = () => {
+      viewG.setAttribute("transform", `translate(${tx},${ty}) scale(${scale})`);
+      const inv = `scale(${(1 / scale).toFixed(3)})`;
+      for (const t of textEls) t.setAttribute("transform", inv);
+    };
+    // Fit the dots in the box, leaving room in screen pixels for the labels.
     function fit() {
       let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-      for (const n of nodes) { const lw = Math.min(30, n.label.length) * 3.1 + 6; x0 = Math.min(x0, n.x - lw); x1 = Math.max(x1, n.x + lw); y0 = Math.min(y0, n.y - 20); y1 = Math.max(y1, n.y + 28); }
-      const s = Math.min(1.5, Math.max(0.25, Math.min(W / (x1 - x0), H / (y1 - y0))));
-      scale = s; tx = -((x0 + x1) / 2) * s; ty = -((y0 + y1) / 2) * s;
-      svg.classList.toggle("small", s < 0.7);
+      for (const n of nodes) {
+        const p = radial ? { x: n.tx, y: n.ty } : n;
+        x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y);
+      }
+      const longest = Math.min(26, Math.max(...nodes.map((n) => n.label.length)));
+      const padX = Math.min(W * 0.3, longest * 3.2 + 16), padY = 46;
+      const s = Math.min(2.2, Math.max(0.15, Math.min((W - 2 * padX) / Math.max(1, x1 - x0), (H - 2 * padY) / Math.max(1, y1 - y0))));
+      scale = s; tx = -((x0 + x1) / 2) * s; ty = -((y0 + y1) / 2) * s + 6;
+      svg.classList.toggle("small", opts.full && nodes.length > 45 && s < 0.6);
       applyView();
     }
     function paint() {
@@ -321,7 +382,7 @@
       tick(); paint();
       if (alpha > 0.02 || dragging) raf = requestAnimationFrame(loop); else raf = 0;
     }
-    const reheat = (a = 0.3) => { alpha = Math.max(alpha, a); if (!raf) raf = requestAnimationFrame(loop); };
+    const reheat = (a = 0.3) => { if (!radial) alpha = Math.max(alpha, a); if (!raf) raf = requestAnimationFrame(loop); };
 
     function highlight(n) {
       svg.classList.toggle("has-hover", !!n);
@@ -347,7 +408,8 @@
       const p = toSvg(ev);
       if (dragging) {
         if (!moved && Math.hypot(p.x - downAt.x, p.y - downAt.y) < 4) return;
-        dragging.x = (p.x - tx) / scale; dragging.y = (p.y - ty) / scale; moved = true; userView = true; reheat(0.15);
+        dragging.x = (p.x - tx) / scale; dragging.y = (p.y - ty) / scale; dragging.moved = true; moved = true; userView = true;
+        if (radial) paint(); else reheat(0.15);
       } else if (pan) { tx = p.x - pan.x; ty = p.y - pan.y; moved = true; userView = true; applyView(); }
     });
     const end = () => {
@@ -362,13 +424,14 @@
       userView = true;
       const p = toSvg(ev), f = Math.exp(-ev.deltaY * 0.0015), ns = Math.min(4, Math.max(0.2, scale * f));
       tx = p.x - ((p.x - tx) * ns) / scale; ty = p.y - ((p.y - ty) * ns) / scale; scale = ns;
-      svg.classList.toggle("zoomed", scale > 1.3);
-      svg.classList.toggle("small", scale < 0.7);
+      svg.classList.toggle("small", scale < 0.6);
       applyView();
     }, { passive: false });
 
     const reduced = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduced) { for (let i = 0; i < 260; i++) tick(); alpha = 0; paint(); } else loop();
+    if (!radial) for (let i = 0; i < 120; i++) forceTick();   // settle most of the way before showing
+    if (reduced) { if (radial) t0 = -1e9; else for (let i = 0; i < 200; i++) forceTick(); alpha = 0; tick(); paint(); }
+    else loop();
     return () => cancelAnimationFrame(raf);
   }
 
@@ -382,16 +445,16 @@
     document.getElementById("nav").innerHTML = items
       .map((s) => `<a href="#/${s.id}" ${s.id === active ? 'aria-current="page"' : ""}>${esc(s.label)}</a>`)
       .join("");
-    document.getElementById("hub-nav").innerHTML = [
-      ...Object.entries(hubs).map(([k, h]) => [k, h.label]),
-      ["map", "Full map"],
-    ].map(([k, l]) => `<a href="#/${esc(k)}" ${k === active ? 'aria-current="page"' : ""}>${esc(l)}</a>`).join("");
+    document.getElementById("hub-nav").innerHTML = [["map", "Full map"]]
+      .map(([k, l]) => `<a href="#/${esc(k)}" ${k === active ? 'aria-current="page"' : ""}>${esc(l)}</a>`).join("");
   }
 
   const goTo = (n) => { location.hash = nodeHref(n); };
+  const setWide = (wide) => document.querySelector(".layout").classList.toggle("is-wide", wide);
 
   function renderRight(centerId, toc) {
     stopGraph();
+    setWide(false);
     const right = document.getElementById("right");
     right.innerHTML = `
       <div class="graph-card">
@@ -401,8 +464,13 @@
         <div class="graph-box" id="graph-box"></div>
       </div>
       ${toc || ""}`;
-    const view = graph.nodes.has(centerId) ? drillView(centerId) : drillView(HOME);
-    stopGraph = drawGraph(document.getElementById("graph-box"), view, { center: graph.nodes.has(centerId) ? centerId : HOME, onClick: goTo });
+    const c = graph.nodes.has(centerId) ? centerId : HOME;
+    stopGraph = drawGraph(document.getElementById("graph-box"), drillView(c), { center: c, onClick: goTo });
+  }
+  function noRight() {
+    stopGraph();
+    document.getElementById("right").innerHTML = "";
+    setWide(true);
   }
 
   function tocHTML(heads) {
@@ -432,88 +500,152 @@
 
   const nodeLink = (id) => { const n = graph.nodes.get(id); return n ? `<a href="${esc(nodeHref(n))}">${esc(n.label)}</a>` : ""; };
 
+  // The node id a value in a relation column points to, if any.
+  function relTarget(section, row, column, value) {
+    const rel = (section.relations || []).find((r) => norm(r.column) === norm(column));
+    if (!rel) return null;
+    if (rel.hub) { const id = `${rel.hub}/${slug(value)}`; return graph.nodes.has(id) ? id : null; }
+    const id = [...(graph.adj.get(row.__id) || [])].find((t) => t.startsWith(rel.section + "/") && norm(graph.nodes.get(t).label) === norm(value));
+    return id || null;
+  }
+
   function statusNotice(section) {
     const d = data[section.id] || {};
     if (d.loading) return `<p class="muted">Loading…</p>`;
     return d.error ? `<p class="notice">${d.stale ? "Showing a saved copy. " : ""}Could not load the sheet: ${esc(d.error)}</p>` : "";
   }
 
-  function renderSection(section) {
-    const d = data[section.id] || { rows: [] };
-    const sub = section.fields.subtitle || (section.relations || []).find((r) => r.hub === "country")?.column;
-    const items = d.rows
-      .slice()
-      .sort((a, b) => get(a, section.fields.title).localeCompare(get(b, section.fields.title)))
-      .map((r) => {
-        const extra = sub ? get(r, sub) : "";
-        return `<li>${nodeLink(r.__id)}${extra ? `<span class="muted"> · ${esc(extra)}</span>` : ""}</li>`;
-      }).join("");
-    $main().innerHTML = `
-      <article class="page">
-        <h1>${esc(section.label)}</h1>
-        ${section.description ? `<p class="lead">${esc(section.description)}</p>` : ""}
-        <p class="add"><a href="${esc(addUrl(section))}" target="_blank" rel="noopener">${esc(section.addLabel || "Add to this list")} in the sheet ↗</a></p>
-        ${statusNotice(section)}
-        ${items ? `<ul class="index">${items}</ul>` : d.loading ? "" : `<p class="muted">${esc(section.emptyText || "Nothing here yet.")}</p>`}
-      </article>`;
-    renderRight(HOME);
+  // ----- list pages (tables) -----
+
+  function cellHTML(section, row, col) {
+    const value = get(row, col.column);
+    if (norm(col.column) === norm(section.title)) return `<a class="row-link" href="${esc("#/" + row.__id)}">${esc(value)}</a>`;
+    if (col.chips) {
+      return `<span class="pills">${splitList(value).map((v) => {
+        const id = relTarget(section, row, col.column, v);
+        return id ? `<a class="pill" href="${esc("#/" + id)}">${esc(v)}</a>` : `<span class="pill">${esc(v)}</span>`;
+      }).join("")}</span>`;
+    }
+    return esc(value);
   }
 
-  function renderEntry(node) {
-    const section = node.section, row = node.row, f = section.fields;
-    const props = [];
-    const prop = (label, html) => html && props.push(`<dt>${esc(label)}</dt><dd>${html}</dd>`);
-    const direct = new Set();
-    for (const rel of section.relations || []) {
-      const values = splitList(get(row, rel.column));
-      const html = values.map((v) => {
-        const id = rel.hub ? `${rel.hub}/${slug(v)}` : [...graph.adj.get(node.id)].find((t) => t.startsWith(rel.section + "/") && norm(graph.nodes.get(t).label) === norm(v));
-        if (id && graph.nodes.has(id)) { direct.add(id); return nodeLink(id); }
-        return esc(v);
-      }).join(", ");
-      prop(rel.label || (rel.hub && hubs[rel.hub]?.single) || rel.column, html);
+  function tableHTML(section, rows) {
+    if (section.list) {
+      return `<ul class="plain-list">${rows.map((r) => `<li><a class="row-link" href="${esc("#/" + r.__id)}">${esc(get(r, section.title))}</a></li>`).join("")}</ul>`;
     }
-    const url = safeUrl(get(row, f.url));
-    const links = [url, ...splitLinks(get(row, f.links))].filter(Boolean);
-    prop("Links", links.map((l) => `<a href="${esc(l)}" target="_blank" rel="noopener">${esc(linkLabel(l))} ↗</a>`).join(", "));
+    return `<div class="table-wrap"><table class="data">
+      <colgroup>${section.table.map((c) => `<col${c.width ? ` style="width:${esc(c.width)}"` : ""}>`).join("")}</colgroup>
+      <thead><tr>${section.table.map((c) => `<th scope="col">${esc(c.label)}</th>`).join("")}</tr></thead>
+      <tbody>${rows.map((r) => `<tr data-href="${esc("#/" + r.__id)}">${section.table.map((c) => `<td>${cellHTML(section, r, c)}</td>`).join("")}</tr>`).join("")}</tbody>
+    </table></div>`;
+  }
 
-    const backlinks = {};
+  function groupRows(section, rows, group) {
+    const byTitle = (a, b) => get(a, section.title).localeCompare(get(b, section.title));
+    if (!group || !group.column) return [["", rows.slice().sort(byTitle)]];
+    const groups = new Map();
+    for (const r of rows) {
+      const keys = splitList(get(r, group.column));
+      for (const k of keys.length ? keys : ["Other"]) {
+        const key = [...groups.keys()].find((g) => norm(g) === norm(k)) || k;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(r);
+      }
+    }
+    return [...groups.entries()].sort((a, b) => (a[0] === "Other") - (b[0] === "Other") || a[0].localeCompare(b[0]))
+      .map(([k, rs]) => [k, rs.sort(byTitle)]);
+  }
+
+  function renderSection(section) {
+    noRight();
+    const d = data[section.id] || { rows: [] };
+    const state = (ui[section.id] ||= { query: "", group: 0 });
+    const groups = section.groups || [];
+    $main().innerHTML = `
+      <article class="page page-wide">
+        <h1>${esc(section.label)}</h1>
+        <div class="callout">${esc(section.addText || "Add to this list")} <a href="${esc(addUrl(section))}" target="_blank" rel="noopener">here<span class="ext" aria-hidden="true">↗</span></a>.</div>
+        <input class="table-search" type="search" placeholder="${esc(section.searchPlaceholder || "Search…")}" value="${esc(state.query)}" aria-label="Search ${esc(section.label)}">
+        ${groups.length > 1 ? `<div class="group-bar"><span class="group-label">Group</span><div class="segmented" role="group" aria-label="Group by">${groups
+          .map((g, i) => `<button type="button" data-group="${i}" aria-pressed="${i === state.group}">${esc(g.label)}</button>`).join("")}</div></div>` : ""}
+        ${statusNotice(section)}
+        <div class="groups"></div>
+      </article>`;
+    const draw = () => {
+      const q = norm(state.query);
+      const cols = [section.title, ...(section.table || []).map((c) => c.column), ...(section.properties || []).map((p) => p.column), section.description];
+      const rows = d.rows.filter((r) => !q || q.split(" ").every((w) => norm(cols.map((c) => get(r, c)).join(" ")).includes(w)));
+      const box = $main().querySelector(".groups");
+      if (!rows.length) { box.innerHTML = d.loading ? "" : `<p class="muted">${d.rows.length ? "Nothing matches that search." : "Nothing here yet."}</p>`; return; }
+      box.innerHTML = groupRows(section, rows, groups[state.group])
+        .map(([name, rs]) => `${name ? `<h2 class="group-title">${esc(name)}</h2>` : ""}${tableHTML(section, rs)}`).join("");
+    };
+    $main().querySelector(".table-search").addEventListener("input", (e) => { state.query = e.target.value; draw(); });
+    $main().querySelectorAll(".segmented button").forEach((b) => b.addEventListener("click", () => {
+      state.group = +b.dataset.group;
+      $main().querySelectorAll(".segmented button").forEach((x) => x.setAttribute("aria-pressed", x === b));
+      draw();
+    }));
+    draw();
+  }
+
+  // whole table row opens the item (the name cell is the real link for keyboards and screen readers)
+  document.addEventListener("click", (e) => {
+    const tr = e.target.closest("tr[data-href]");
+    if (!tr || e.target.closest("a")) return;
+    location.hash = tr.dataset.href;
+  });
+
+  // ----- item pages -----
+
+  function renderEntry(node) {
+    const section = node.section, row = node.row;
+    const rows = [];
+    const shown = new Set();
+    for (const p of section.properties || []) {
+      const raw = get(row, p.column);
+      if (!raw) continue;
+      let html;
+      if (p.url) html = splitLinks(raw).map((l) => `<a href="${esc(l)}" target="_blank" rel="noopener">${esc(l.replace(/^mailto:/, ""))}<span class="ext" aria-hidden="true">↗</span></a>`).join(", ");
+      else if (p.email) { const m = safeUrl(raw); html = m ? `<a href="${esc(m)}">${esc(raw)}<span class="ext" aria-hidden="true">↗</span></a>` : esc(raw); }
+      else {
+        const rel = (section.relations || []).some((r) => norm(r.column) === norm(p.column));
+        html = rel
+          ? splitList(raw).map((v) => { const id = relTarget(section, row, p.column, v); if (id) shown.add(id); return id ? nodeLink(id) : esc(v); }).join(", ")
+          : esc(raw);
+      }
+      if (html) rows.push(`<dt>${esc(p.label)}:</dt><dd>${html}</dd>`);
+    }
+    // backlinks: entries in other tabs that point here
+    const back = {};
     for (const id of graph.adj.get(node.id) || []) {
       const n = graph.nodes.get(id);
-      if (!n.section || direct.has(id)) continue;
-      (backlinks[n.section.label] ||= []).push(id);
+      if (!n.section || shown.has(id)) continue;
+      (back[n.section.label] ||= []).push(id);
     }
-    const back = Object.entries(backlinks)
-      .map(([label, ids]) => `<h2>${esc(label)}</h2><ul class="index">${ids.map((id) => `<li>${nodeLink(id)}</li>`).join("")}</ul>`).join("");
+    for (const [label, ids] of Object.entries(back)) rows.push(`<dt>${esc(label)}:</dt><dd>${ids.map(nodeLink).join(", ")}</dd>`);
 
-    const subtitle = get(row, f.subtitle), body = get(row, f.body), note = get(row, f.note);
+    const desc = get(row, section.description);
     $main().innerHTML = `
       <article class="page">
-        <p class="crumb"><a href="#/${esc(section.id)}">${esc(section.label)}</a></p>
         <h1>${esc(node.label)}</h1>
-        ${subtitle ? `<p class="lead">${esc(subtitle)}</p>` : ""}
-        ${props.length ? `<dl class="props">${props.join("")}</dl>` : ""}
-        ${body ? `<p>${esc(body)}</p>` : ""}
-        ${note ? `<p>${esc(note)}</p>` : ""}
-        ${back}
+        ${rows.length ? `<dl class="props">${rows.join("")}</dl>` : ""}
+        ${desc ? `<div class="description">${desc.split(/\n{2,}/).map((p) => `<p>${esc(p)}</p>`).join("")}</div>` : ""}
       </article>`;
     renderRight(node.id);
   }
 
   function renderHub(node) {
     const h = hubs[node.hub] || {};
-    const groups = {};
-    for (const id of graph.adj.get(node.id) || []) {
-      const n = graph.nodes.get(id);
-      if (n.section) (groups[n.section.id] ||= []).push(id);
+    const rows = [];
+    for (const s of cfg.sections) {
+      const ids = [...(graph.adj.get(node.id) || [])].filter((id) => graph.nodes.get(id).kind === s.id);
+      if (ids.length) rows.push(`<dt>${esc(s.label)}:</dt><dd>${ids.map(nodeLink).join(", ")}</dd>`);
     }
-    const body = cfg.sections.filter((s) => groups[s.id])
-      .map((s) => `<h2>${esc(s.label)}</h2><ul class="index">${groups[s.id].map((id) => `<li>${nodeLink(id)}</li>`).join("")}</ul>`).join("");
     $main().innerHTML = `
       <article class="page">
-        <p class="crumb"><a href="#/${esc(node.hub)}">${esc(h.label || node.hub)}</a></p>
         <h1>${esc(node.label)}</h1>
-        ${body || `<p class="muted">Nothing is linked to this yet.</p>`}
+        ${rows.length ? `<dl class="props">${rows.join("")}</dl>` : `<p class="muted">Nothing is linked to this yet.</p>`}
       </article>`;
     renderRight(node.id);
   }
@@ -521,17 +653,16 @@
   function renderHubIndex(hubKey) {
     const h = hubs[hubKey];
     const items = [...graph.nodes.values()].filter((n) => n.hub === hubKey).sort((a, b) => a.label.localeCompare(b.label));
+    noRight();
     $main().innerHTML = `
       <article class="page">
         <h1>${esc(h.label)}</h1>
-        <ul class="index">${items.map((n) => `<li>${nodeLink(n.id)} <span class="muted">· ${graph.adj.get(n.id).size}</span></li>`).join("")}</ul>
+        <ul class="plain-list">${items.map((n) => `<li>${nodeLink(n.id)} <span class="muted">· ${graph.adj.get(n.id).size}</span></li>`).join("")}</ul>
       </article>`;
-    renderRight(HOME);
   }
 
   function renderMap() {
-    stopGraph();
-    document.getElementById("right").innerHTML = "";
+    noRight();
     $main().innerHTML = `
       <article class="page page-wide">
         <h1>Full map</h1>
@@ -576,7 +707,6 @@
     const id = rest.length ? `${first}/${rest.join("/")}` : "";
     const section = sectionById(first);
     renderNav(first);
-    document.querySelector(".layout").classList.toggle("is-map", first === "map");
     const n = id && graph.nodes.get(id);
     if (first === "map") { document.title = `Full map · ${cfg.title}`; renderMap(); }
     else if (section && n) { document.title = `${n.label} · ${cfg.title}`; renderEntry(n); }
