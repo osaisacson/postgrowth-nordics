@@ -103,6 +103,10 @@ python3 -m http.server 8000
 
 Then open http://localhost:8000.
 
+## Updating the code
+
+Browsers keep the site's files for a few minutes. After changing `app.js`, `style.css` or `config.js`, bump the `?v=` number on them in `index.html` so everyone gets the new version at once.
+
 ## Changing the look
 
 All colours are at the top of `style.css`; the graph colours for each section and hub are in `config.js`.
