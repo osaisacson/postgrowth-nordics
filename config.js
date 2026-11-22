@@ -90,14 +90,38 @@ window.SITE_CONFIG = {
     who does not respect the code of conduct.</p>
   `,
 
-  // Footer text (HTML allowed).
-  footer: `Content is community-maintained in an <a href="{sheetUrl}">open Google Sheet</a>.`,
+  // Shown at the end of the About page. {sheetUrl} becomes the link to the sheet.
+  contribute: `
+    <h3>Contribute</h3>
+    <p>Content is community-maintained in an <a href="{sheetUrl}" target="_blank" rel="noopener">open Google Sheet</a>.
+    You can add new content to any of its tabs to make it appear on the site. We work on a principle of radical
+    transparency, and will moderate the sheet and edit (or remove) any content accordingly. This means you may
+    sometimes see content that has not yet been approved by us. Check back in a week, and if it is there still it
+    should be legit. If you still see something which should not be here, please contact
+    <a href="mailto:postgrowth.nordics@gmail.com">postgrowth.nordics@gmail.com</a>.</p>
+  `,
+
+  // The graph in the right-hand column. "home" is the central node (the About page).
+  // Clicking a dot opens it and the graph drills down one level, following `children`.
+  graph: {
+    rootLabel: "Post-growth Nordics",
+    children: {
+      home: ["country"],          // start page: the countries, radiating from the centre
+      country: ["nodes"],         // a country: its nodes
+      nodes: ["people"],          // a node: the people affiliated with it
+      people: ["topic"],          // a person: the topics they work with
+      topic: ["people"],          // a topic: the people working with it
+      library: ["topic", "people"],
+    },
+    fallback: { country: ["people"] }, // a country with no nodes yet shows its people
+    parents: { country: ["home"], nodes: ["country"], people: ["nodes"] }, // shown faintly, to step back up
+  },
 
   // Shared "hub" values that link entries together, like tags in Obsidian.
   // Every distinct value becomes its own page (e.g. #/topic/energy) and a dot in the graph.
   hubs: {
-    topic: { label: "Topics", color: "#8a8f98" },
-    country: { label: "Countries", color: "#b07cc6" },
+    topic: { label: "Topics", color: "#a8d5b5" },
+    country: { label: "Countries", color: "#2f7d55" },
   },
 
   sections: [
@@ -107,7 +131,7 @@ window.SITE_CONFIG = {
       tab: "Library",
       gid: "486577674",
       headerRow: 2,
-      color: "#4f7cc9",
+      color: "#1f5c40",
       description: "Readings the network recommends.",
       addLabel: "Suggest a reading",
       layout: "list",
@@ -133,7 +157,7 @@ window.SITE_CONFIG = {
       tab: "Nodes",
       gid: "1999306781",
       headerRow: 2,
-      color: "#d0873f",
+      color: "#43a06b",
       description: "Organisations, groups and institutions that are part of the network.",
       addLabel: "Suggest a node",
       layout: "cards",
@@ -154,7 +178,7 @@ window.SITE_CONFIG = {
       gid: "1031118613",       // the number after #gid= when that tab is open (used for the "Add" links)
       headerRow: 2,            // the row that holds the column names
       // approvedColumn: "Approved", // optional: only show rows where this checkbox column is ticked
-      color: "#3f8f6f",        // colour of these entries in the graph
+      color: "#79c08f",        // colour of these entries in the graph (all greens)
       description: "People in the network and what they work on.",
       addLabel: "Add yourself",
       layout: "cards",

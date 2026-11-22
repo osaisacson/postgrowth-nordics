@@ -10,9 +10,11 @@ Built for [Post-growth Nordics](https://postgrowthnordics.org), and made to be c
 
 - Each **tab** in the Google Sheet is one **page** on the site (People, Library, Nodes…).
 - **Relationship columns** link entries together, Obsidian style: shared topics and countries,
-  people's affiliations to Nodes, and readings to the members connected to them. Every entry shows
-  its links and backlinks, every topic and country gets its own page, and a **graph** in the right-hand
-  column shows how everything connects (click a dot to open it, drag to move, scroll to zoom).
+  people's affiliations to Nodes, and readings to the members connected to them. Every entry has its
+  own page with its links and backlinks, and every topic and country gets a page too.
+- A **graph** in the right-hand column starts from the network itself (the About page) with the countries
+  around it. Clicking a dot opens it and drills down one level: country → nodes → people → topics → people.
+  The drill-down order is set in `graph` in `config.js`. **Full map** shows everything at once.
 - When someone visits, their browser downloads each tab as CSV straight from Google and draws it.
   Edits in the sheet appear on the site within about a minute.
 - Optionally, set `approvedColumn` to a checkbox column to hide rows until someone has ticked them.
