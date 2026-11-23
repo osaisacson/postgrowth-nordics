@@ -37,6 +37,10 @@ const LISTS_TAB = "Lists";
 const STAMP_COLUMN = "Sheet modified"; // set by the script on every edit; protected
 const STAMP_FORMAT = "yyyy-mm-dd hh:mm";
 const STAMP_HINT = "Filled in automatically when the row changes. Only the script can edit it.";
+// Added to the instruction line (row 1) of every tab. Row 1 is never shown on the site.
+const CONSENT = "By adding or editing information in this sheet, you agree that it is published openly on " +
+  "postgrowthnordics.org. Only add details about other people with their permission. " +
+  "To have something removed, email postgrowth.nordics@gmail.com.";
 
 const DEFAULT_COUNTRIES = ["Denmark", "Faroe Islands", "Finland", "Greenland", "Iceland", "Norway", "Sweden", "Åland", "Other"];
 
@@ -91,6 +95,7 @@ function setUpSheet() {
   for (const tabName of Object.keys(RULES)) {
     const sheet = ss.getSheetByName(tabName);
     if (!sheet) { Logger.log("Skipped missing tab: " + tabName); continue; }
+    addConsent_(sheet);
     sheet.setFrozenRows(HEADER_ROW);
     sheet.getRange(HEADER_ROW, 1, 1, sheet.getLastColumn()).setFontWeight("bold");
     const headers = headerMap_(sheet);
@@ -176,6 +181,28 @@ function headerMap_(sheet) {
 }
 
 function norm_(s) { return String(s || "").trim().replace(/\s+/g, " ").toLowerCase(); }
+
+// ---------- consent note ----------
+
+// Appends CONSENT to the text in A1, keeping its links and styling. Does nothing if it is already there.
+function addConsent_(sheet) {
+  const cell = sheet.getRange(1, 1);
+  const rt = cell.getRichTextValue();
+  const text = rt ? rt.getText() : String(cell.getValue());
+  if (text.includes(CONSENT)) return;
+  const sep = text.trim() ? (/[.!?]$/.test(text.trim()) ? " " : ". ") : "";
+  const base = text.trim();
+  const b = SpreadsheetApp.newRichTextValue().setText(base + sep + CONSENT);
+  if (rt) for (const run of rt.getRuns()) {
+    const start = run.getStartIndex(), end = Math.min(run.getEndIndex(), base.length);
+    if (end <= start) continue;
+    b.setTextStyle(start, end, run.getTextStyle());
+    if (run.getLinkUrl()) b.setLinkUrl(start, end, run.getLinkUrl());
+  }
+  cell.setRichTextValue(b.build());
+  const area = cell.getMergedRanges()[0] || cell;
+  area.setWrap(true).setVerticalAlignment("middle");
+}
 
 // ---------- the "Sheet modified" column ----------
 
