@@ -278,7 +278,7 @@
     svg.appendChild(viewG);
 
     const lineEls = links.map((l) => gl.appendChild(el("line", { class: view.faded?.has(l.s.id) || view.faded?.has(l.t.id) ? "is-faded" : "" })));
-    const textEls = [];
+    const textEls = [], hitEls = [];
     const nodeEls = nodes.map((n) => {
       const g = el("g", { class: `g-node k-${n.kind}` + (n === center ? " is-center" : "") + (view.faded?.has(n.id) ? " is-faded" : "") });
       if (n.id === HOME) {
@@ -289,6 +289,11 @@
         n.r = n === center ? 9 : (n.hub ? 4.5 : 5.5) + (opts.full ? Math.min(5, Math.sqrt(n.deg)) : 0);
         g.append(el("circle", { r: n.r, fill: colorOf(n.kind) }));
       }
+      // an invisible, larger circle so small dots are easy to click (resized with the zoom)
+      const hit = el("circle", { r: n.r + 6, class: "g-hit" });
+      hit.dataset.r = n.r;
+      hitEls.push(hit);
+      g.prepend(hit);
       const t = el("text");
       t.textContent = n.label.length > 26 ? n.label.slice(0, 24) + "…" : n.label;
       textEls.push(t);
@@ -354,6 +359,7 @@
       viewG.setAttribute("transform", `translate(${tx},${ty}) scale(${scale})`);
       const inv = `scale(${(1 / scale).toFixed(3)})`;
       for (const t of textEls) t.setAttribute("transform", inv);
+      for (const h of hitEls) h.setAttribute("r", Math.max(+h.dataset.r + 2, 12 / scale));
     };
     // Fit the dots in the box, leaving room in screen pixels for the labels.
     function fit() {
@@ -399,7 +405,7 @@
       g.addEventListener("pointerenter", () => { if (!dragging && !pan) highlight(nodes[i]); });
       g.addEventListener("pointerleave", () => { if (!dragging) highlight(null); });
       g.addEventListener("pointerdown", (ev) => {
-        ev.stopPropagation(); downNode = nodes[i]; dragging = nodes[i]; moved = false; downAt = toSvg(ev);
+        ev.stopPropagation(); downNode = nodes[i]; dragging = nodes[i]; moved = false; downAt = { x: ev.clientX, y: ev.clientY };
         svg.setPointerCapture(ev.pointerId); highlight(nodes[i]);
       });
     });
@@ -407,7 +413,7 @@
     svg.addEventListener("pointermove", (ev) => {
       const p = toSvg(ev);
       if (dragging) {
-        if (!moved && Math.hypot(p.x - downAt.x, p.y - downAt.y) < 4) return;
+        if (!moved && Math.hypot(ev.clientX - downAt.x, ev.clientY - downAt.y) < 6) return; // a click, not a drag
         dragging.x = (p.x - tx) / scale; dragging.y = (p.y - ty) / scale; dragging.moved = true; moved = true; userView = true;
         if (radial) paint(); else reheat(0.15);
       } else if (pan) { tx = p.x - pan.x; ty = p.y - pan.y; moved = true; userView = true; applyView(); }

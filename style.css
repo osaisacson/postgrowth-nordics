@@ -82,7 +82,7 @@ h1 { font-size: clamp(1.7rem, 3vw, 2.2rem); margin-bottom: 16px; }
 .g-links line { stroke: var(--link-line); stroke-width: 1.2; transition: stroke .15s, opacity .15s; }
 .g-node { cursor: pointer; transition: opacity .15s; }
 .g-node circle { stroke: #fff; stroke-width: 1.5; }
-.g-node text { font: 11px var(--font); fill: #5b5b5b; pointer-events: none; paint-order: stroke; stroke: #fff; stroke-width: 3px; }
+.g-node text { font: 11px var(--font); fill: #5b5b5b; cursor: pointer; paint-order: stroke; stroke: #fff; stroke-width: 3px; }
 .g-node.is-center text, .g-node.k-home text { fill: var(--text); font-weight: 600; font-size: 12px; }
 .g-node.is-center:not(.k-home) circle { stroke: #1f5c40; stroke-width: 2; }
 .g-node.is-faded { opacity: .55; }
@@ -90,9 +90,10 @@ h1 { font-size: clamp(1.7rem, 3vw, 2.2rem); margin-bottom: 16px; }
 .g-node .home-halo { fill: #e8f9e9; stroke: none; }
 .g-node .home-ring { fill: #84cb71; stroke: #2bb274; stroke-width: 1.6; }
 .g-node .home-core { fill: #e8f9e9; stroke: #35b574; stroke-width: 1.6; }
-.g-node.label-hidden text { opacity: 0; }
-svg.small .g-node:not(.is-center):not(.k-home):not(.k-country) text { opacity: 0; }
-svg.zoomed .g-node.label-hidden text { opacity: 1; }
+.g-node.label-hidden text { opacity: 0; pointer-events: none; }
+.g-node .g-hit { fill: transparent; stroke: none; }
+svg.small .g-node:not(.is-center):not(.k-home):not(.k-country) text { opacity: 0; pointer-events: none; }
+svg.zoomed .g-node.label-hidden text { opacity: 1; pointer-events: auto; }
 svg.has-hover .g-node { opacity: .25; }
 svg.has-hover .g-links line { opacity: .2; }
 svg.has-hover .g-node.is-lit { opacity: 1; }
