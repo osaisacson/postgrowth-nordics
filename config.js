@@ -160,6 +160,7 @@ window.SITE_CONFIG = {
         { label: "Network members", column: "Connections to PGN (eg member authors)" },
       ],
       description: "Comments",                 // shown as text under the box
+      modified: "Sheet modified",              // set by the sheet script; shown small at the bottom
       // Relationship columns. Values can be several, separated by commas.
       //   hub:     links entries that share a value (topics, countries)
       //   section: links to the entry in another tab whose name matches the value
@@ -184,7 +185,8 @@ window.SITE_CONFIG = {
         { label: "Country", column: "Country" },
         { label: "Website", column: "Url", url: true },
       ],
-      description: "Comments",
+      description: "Description",
+      modified: "Sheet modified",
       relations: [
         { column: "Country", hub: "country" },
       ],
@@ -221,6 +223,7 @@ window.SITE_CONFIG = {
         { label: "Links", column: "Links", url: true },
       ],
       description: "Description",
+      modified: "Sheet modified",
       relations: [
         { column: "Affiliations", section: "nodes" },
         { column: "Topics", hub: "topic" },

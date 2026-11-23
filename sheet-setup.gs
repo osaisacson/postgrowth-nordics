@@ -15,6 +15,8 @@
  *  - Checks that Url columns hold a web address and Email holds an email address.
  *  - Adds a hint to every column header (hover the header to see it) and to the cells below it.
  *  - Freezes the instruction and header rows so they stay visible.
+ *  - Fills in the "Sheet modified" column with the date and time whenever a row changes, and
+ *    protects that column so only the sheet owner (and this script) can change it.
  *
  * How to run it:
  *  1. In the Google Sheet: Extensions → Apps Script.
@@ -32,6 +34,9 @@
 const HEADER_ROW = 2;      // row with the column names
 const FIRST_DATA_ROW = 3;  // first row with entries
 const LISTS_TAB = "Lists";
+const STAMP_COLUMN = "Sheet modified"; // set by the script on every edit; protected
+const STAMP_FORMAT = "yyyy-mm-dd hh:mm";
+const STAMP_HINT = "Filled in automatically when the row changes. Only the script can edit it.";
 
 const DEFAULT_COUNTRIES = ["Denmark", "Faroe Islands", "Finland", "Greenland", "Iceland", "Norway", "Sweden", "Åland", "Other"];
 
@@ -76,7 +81,7 @@ const RULES = {
     "Name": { hint: "Name of the organisation, group or institution. People link to it by this name in their Affiliations." },
     "Url": { url: true, hint: "Website, starting with https://" },
     "Country": { list: [LISTS_TAB, "Countries"], hint: "Where it's based." },
-    "Comments": { hint: "A short description." },
+    "Description": { hint: "A short description. Shown on the node's own page." },
   },
 };
 
@@ -109,6 +114,7 @@ function setUpSheet() {
       }
       if (v) cells.setDataValidation(v.setHelpText(rule.hint || "").build());
     }
+    setUpStampColumn_(sheet, headers[norm_(STAMP_COLUMN)]);
   }
   installGrowTrigger_(ss);
   const done = "Done. One last manual step for the columns where people pick several values " +
@@ -168,6 +174,41 @@ function headerMap_(sheet) {
 
 function norm_(s) { return String(s || "").trim().replace(/\s+/g, " ").toLowerCase(); }
 
+// ---------- the "Sheet modified" column ----------
+
+const STAMP_PROTECTION = "Sheet modified: filled in by the sheet script";
+
+// Hint, date format, and a protection that leaves only the owner (and so the script) as editor.
+function setUpStampColumn_(sheet, c) {
+  if (!c) { Logger.log(`No "${STAMP_COLUMN}" column in ${sheet.getName()}`); return; }
+  sheet.getRange(HEADER_ROW, c).setNote(STAMP_HINT);
+  sheet.getRange(FIRST_DATA_ROW, c, Math.max(1, sheet.getMaxRows() - FIRST_DATA_ROW + 1), 1)
+    .clearDataValidations().setNumberFormat(STAMP_FORMAT).setFontColor("#8a8a8a");
+  sheet.getProtections(SpreadsheetApp.ProtectionType.RANGE)
+    .filter((p) => p.getDescription() === STAMP_PROTECTION).forEach((p) => p.remove());
+  const p = sheet.getRange(1, c, sheet.getMaxRows(), 1).protect().setDescription(STAMP_PROTECTION);
+  p.addEditor(Session.getEffectiveUser());
+  p.removeEditors(p.getEditors());
+  if (p.canDomainEdit()) p.setDomainEdit(false);
+}
+
+// Writes the current date and time into the edited rows (or clears it if the row is now empty).
+function stampRows_(e) {
+  const sheet = e.range.getSheet();
+  if (!RULES[sheet.getName()]) return;
+  const c = headerMap_(sheet)[norm_(STAMP_COLUMN)];
+  if (!c) return;
+  if (e.range.getColumn() === c && e.range.getLastColumn() === c) return; // only the stamp itself changed
+  const top = Math.max(FIRST_DATA_ROW, e.range.getRow());
+  const n = e.range.getLastRow() - top + 1;
+  if (n < 1) return;
+  const lastCol = sheet.getLastColumn();
+  const now = new Date();
+  const rows = sheet.getRange(top, 1, n, lastCol).getValues();
+  const stamps = rows.map((r) => [r.some((v, i) => i + 1 !== c && String(v).trim() !== "") ? now : ""]);
+  sheet.getRange(top, c, n, 1).setValues(stamps).setNumberFormat(STAMP_FORMAT);
+}
+
 // ---------- keeping the shared lists growing ----------
 
 function installGrowTrigger_(ss) {
@@ -175,9 +216,11 @@ function installGrowTrigger_(ss) {
   if (!exists) ScriptApp.newTrigger("growLists").forSpreadsheet(ss).onEdit().create();
 }
 
-// Runs after every edit. Adds new values from the GROW columns to their lists.
+// Runs after every edit (as the sheet owner, so it can write the protected column).
+// Stamps "Sheet modified" and adds new values from the GROW columns to their lists.
 function growLists(e) {
   if (!e || !e.range) return;
+  try { stampRows_(e); } catch (err) { Logger.log(err); }
   const sheet = e.range.getSheet();
   const rules = GROW.filter((g) => g.tab === sheet.getName());
   if (!rules.length || e.range.getLastRow() < FIRST_DATA_ROW) return;

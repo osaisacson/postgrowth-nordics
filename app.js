@@ -598,6 +598,12 @@
 
   // ----- item pages -----
 
+  // "2026-11-23T07:48:56.701Z" or "2026-11-23 07:48" → "23 Nov 2026"; anything else is shown as typed.
+  function formatDate(v) {
+    const d = new Date(/^\d{4}-\d\d-\d\d \d/.test(v) ? v.replace(" ", "T") : v);
+    return isNaN(d) ? v : d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  }
+
   function renderEntry(node) {
     const section = node.section, row = node.row;
     const rows = [];
@@ -626,11 +632,13 @@
     for (const [label, ids] of Object.entries(back)) rows.push(`<dt>${esc(label)}:</dt><dd>${ids.map(nodeLink).join(", ")}</dd>`);
 
     const desc = get(row, section.description);
+    const mod = section.modified && get(row, section.modified);
     $main().innerHTML = `
       <article class="page">
         <h1>${esc(node.label)}</h1>
         ${rows.length ? `<dl class="props">${rows.join("")}</dl>` : ""}
         ${desc ? `<div class="description">${desc.split(/\n{2,}/).map((p) => `<p>${esc(p)}</p>`).join("")}</div>` : ""}
+        ${mod ? `<p class="modified">Last updated in the sheet: ${esc(formatDate(mod))}</p>` : ""}
       </article>`;
     renderRight(node.id);
   }
