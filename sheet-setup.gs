@@ -184,24 +184,27 @@ function norm_(s) { return String(s || "").trim().replace(/\s+/g, " ").toLowerCa
 
 // ---------- consent note ----------
 
-// Appends CONSENT to the text in A1, keeping its links and styling. Does nothing if it is already there.
+// Adds CONSENT after the instruction in A1 (rebuilding it each run), links the site address and the
+// email, and spreads row 1 across the columns so the text wraps to a readable width.
 function addConsent_(sheet) {
   const cell = sheet.getRange(1, 1);
-  const rt = cell.getRichTextValue();
-  const text = rt ? rt.getText() : String(cell.getValue());
-  if (text.includes(CONSENT)) return;
-  const sep = text.trim() ? (/[.!?]$/.test(text.trim()) ? " " : ". ") : "";
-  const base = text.trim();
-  const b = SpreadsheetApp.newRichTextValue().setText(base + sep + CONSENT);
-  if (rt) for (const run of rt.getRuns()) {
-    const start = run.getStartIndex(), end = Math.min(run.getEndIndex(), base.length);
-    if (end <= start) continue;
-    b.setTextStyle(start, end, run.getTextStyle());
-    if (run.getLinkUrl()) b.setLinkUrl(start, end, run.getLinkUrl());
-  }
+  const base = String(cell.getValue()).replace(CONSENT, "").trim();
+  const sep = base ? (/[.!?]$/.test(base) ? " " : ". ") : "";
+  const text = base + sep + CONSENT;
+  const plain = SpreadsheetApp.newTextStyle().setBold(false).setUnderline(false).setForegroundColor("#000000").build();
+  const bold = SpreadsheetApp.newTextStyle().setBold(true).setUnderline(false).setForegroundColor("#000000").build();
+  const b = SpreadsheetApp.newRichTextValue().setText(text).setTextStyle(0, text.length, plain);
+  if (base) b.setTextStyle(0, base.length, bold);
+  const link = (word, url) => { for (let i = text.indexOf(word); i !== -1; i = text.indexOf(word, i + 1)) b.setLinkUrl(i, i + word.length, url); };
+  link("postgrowthnordics.org", "https://postgrowthnordics.org");
+  link("postgrowth.nordics@gmail.com", "mailto:postgrowth.nordics@gmail.com");
+  const cols = Math.max(1, sheet.getLastColumn());
+  const row = sheet.getRange(1, 1, 1, cols);
+  const othersEmpty = cols === 1 || row.getValues()[0].slice(1).every((v) => v === "");
+  if (cols > 1 && othersEmpty && !cell.isPartOfMerge()) row.merge();
   cell.setRichTextValue(b.build());
-  const area = cell.getMergedRanges()[0] || cell;
-  area.setWrap(true).setVerticalAlignment("middle");
+  (cell.getMergedRanges()[0] || cell).setWrap(true).setVerticalAlignment("middle");
+  sheet.setRowHeight(1, 72); // merged cells do not grow by themselves
 }
 
 // ---------- the "Sheet modified" column ----------
