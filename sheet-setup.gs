@@ -102,6 +102,9 @@ function setUpSheet() {
       sheet.getRange(HEADER_ROW, c).setNote(rule.hint || "");
       let v = null;
       if (rule.list) {
+        // Keep an existing dropdown, so settings made by hand (chips, multiple selections) survive a re-run.
+        const existing = cells.getCell(1, 1).getDataValidation();
+        if (existing && existing.getCriteriaType() === SpreadsheetApp.DataValidationCriteria.VALUE_IN_RANGE) continue;
         const src = ss.getSheetByName(rule.list[0]);
         const srcCol = src && headerMap_(src)[norm_(rule.list[1])];
         if (!srcCol) { Logger.log(`No source column ${rule.list.join(" → ")}`); continue; }
