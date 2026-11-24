@@ -358,7 +358,7 @@
     const applyView = () => {
       viewG.setAttribute("transform", `translate(${tx},${ty}) scale(${scale})`);
       const inv = `scale(${(1 / scale).toFixed(3)})`;
-      for (const t of textEls) t.setAttribute("transform", inv);
+      textEls.forEach((t, i) => { t.setAttribute("transform", inv); t.setAttribute("y", (nodes[i].r * scale + 12).toFixed(1)); });
       for (const h of hitEls) h.setAttribute("r", Math.max(+h.dataset.r + 2, 12 / scale));
     };
     // Fit the dots in the box, leaving room in screen pixels for the labels.
@@ -369,10 +369,11 @@
         x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y);
       }
       const longest = Math.min(26, Math.max(...nodes.map((n) => n.label.length)));
-      const padX = Math.min(W * 0.3, longest * 3.2 + 16), padY = 46;
-      const s = Math.min(2.2, Math.max(0.15, Math.min((W - 2 * padX) / Math.max(1, x1 - x0), (H - 2 * padY) / Math.max(1, y1 - y0))));
+      const narrow = opts.full && W < 500;   // phones: minor labels hidden until zoomed, so less side padding
+      const padX = narrow ? 24 : Math.min(W * 0.3, longest * 3.2 + 16), padY = 46;
+      const s = Math.min(1.8, Math.max(0.15, Math.min((W - 2 * padX) / Math.max(1, x1 - x0), (H - 2 * padY) / Math.max(1, y1 - y0))));
       scale = s; tx = -((x0 + x1) / 2) * s; ty = -((y0 + y1) / 2) * s + 6;
-      svg.classList.toggle("small", opts.full && nodes.length > 45 && s < 0.6);
+      svg.classList.toggle("small", opts.full && (nodes.length > 45 || narrow) && s < 0.6);
       applyView();
     }
     function paint() {
@@ -401,16 +402,40 @@
       return { x: ((ev.clientX - r.left) / r.width - 0.5) * W, y: ((ev.clientY - r.top) / r.height - 0.5) * H };
     };
     let pan = null, moved = false, downNode = null, downAt = null;
+    // two fingers pinch to zoom (phones and tablets have no scroll wheel)
+    const touches = new Map();
+    let pinch = null;
+    const mid = () => { const [a, b] = [...touches.values()]; return { clientX: (a.clientX + b.clientX) / 2, clientY: (a.clientY + b.clientY) / 2 }; };
+    const spread = () => { const [a, b] = [...touches.values()]; return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) || 1; };
+    svg.addEventListener("pointerdown", (ev) => {
+      if (ev.pointerType !== "touch") return;
+      touches.set(ev.pointerId, { clientX: ev.clientX, clientY: ev.clientY });
+      if (touches.size === 2) {
+        const m = toSvg(mid());
+        pinch = { d: spread(), s: scale, wx: (m.x - tx) / scale, wy: (m.y - ty) / scale };
+        dragging = null; pan = null; downNode = null; moved = true; userView = true; highlight(null);
+      }
+    }, true);
+    const lift = (ev) => { touches.delete(ev.pointerId); if (touches.size < 2) pinch = null; };
     nodeEls.forEach((g, i) => {
       g.addEventListener("pointerenter", () => { if (!dragging && !pan) highlight(nodes[i]); });
       g.addEventListener("pointerleave", () => { if (!dragging) highlight(null); });
       g.addEventListener("pointerdown", (ev) => {
-        ev.stopPropagation(); downNode = nodes[i]; dragging = nodes[i]; moved = false; downAt = { x: ev.clientX, y: ev.clientY };
+        ev.stopPropagation(); if (pinch) return; downNode = nodes[i]; dragging = nodes[i]; moved = false; downAt = { x: ev.clientX, y: ev.clientY };
         svg.setPointerCapture(ev.pointerId); highlight(nodes[i]);
       });
     });
-    svg.addEventListener("pointerdown", (ev) => { const p = toSvg(ev); pan = { x: p.x - tx, y: p.y - ty }; moved = false; svg.setPointerCapture(ev.pointerId); });
+    svg.addEventListener("pointerdown", (ev) => { if (pinch) return; const p = toSvg(ev); pan = { x: p.x - tx, y: p.y - ty }; moved = false; svg.setPointerCapture(ev.pointerId); });
     svg.addEventListener("pointermove", (ev) => {
+      if (touches.has(ev.pointerId)) touches.set(ev.pointerId, { clientX: ev.clientX, clientY: ev.clientY });
+      if (pinch && touches.size === 2) {
+        const m = toSvg(mid());
+        scale = Math.min(4, Math.max(0.2, pinch.s * (spread() / pinch.d)));
+        tx = m.x - pinch.wx * scale; ty = m.y - pinch.wy * scale;
+        svg.classList.toggle("small", scale < 0.6);
+        applyView();
+        return;
+      }
       const p = toSvg(ev);
       if (dragging) {
         if (!moved && Math.hypot(ev.clientX - downAt.x, ev.clientY - downAt.y) < 6) return; // a click, not a drag
@@ -423,8 +448,8 @@
       if (dragging) highlight(null);
       dragging = null; pan = null; downNode = null;
     };
-    svg.addEventListener("pointerup", end);
-    svg.addEventListener("pointercancel", end);
+    svg.addEventListener("pointerup", (ev) => { lift(ev); end(); });
+    svg.addEventListener("pointercancel", (ev) => { lift(ev); end(); });
     svg.addEventListener("wheel", (ev) => {
       ev.preventDefault();
       userView = true;
@@ -527,6 +552,7 @@
     const value = get(row, col.column);
     if (norm(col.column) === norm(section.title)) return `<a class="row-link" href="${esc("#/" + row.__id)}">${esc(value)}</a>`;
     if (col.chips) {
+      if (!splitList(value).length) return "";
       return `<span class="pills">${splitList(value).map((v) => {
         const id = relTarget(section, row, col.column, v);
         return id ? `<a class="pill" href="${esc("#/" + id)}">${esc(v)}</a>` : `<span class="pill">${esc(v)}</span>`;
@@ -542,7 +568,7 @@
     return `<div class="table-wrap"><table class="data">
       <colgroup>${section.table.map((c) => `<col${c.width ? ` style="width:${esc(c.width)}"` : ""}>`).join("")}</colgroup>
       <thead><tr>${section.table.map((c) => `<th scope="col">${esc(c.label)}</th>`).join("")}</tr></thead>
-      <tbody>${rows.map((r) => `<tr data-href="${esc("#/" + r.__id)}">${section.table.map((c) => `<td>${cellHTML(section, r, c)}</td>`).join("")}</tr>`).join("")}</tbody>
+      <tbody>${rows.map((r) => `<tr data-href="${esc("#/" + r.__id)}">${section.table.map((c) => `<td${norm(c.column) === norm(section.title) ? ' class="is-title"' : ""} data-label="${esc(c.label)}">${cellHTML(section, r, c)}</td>`).join("")}</tr>`).join("")}</tbody>
     </table></div>`;
   }
 
@@ -680,7 +706,7 @@
     $main().innerHTML = `
       <article class="page page-wide">
         <h1>Full map</h1>
-        <p class="lead">Everything in the network and how it connects. Drag to move, scroll to zoom, click to open.</p>
+        <p class="lead">Everything in the network and how it connects. Drag to move, scroll or pinch to zoom, click to open.</p>
         <div class="graph-card map"><div class="graph-box" id="map-box"></div></div>
       </article>`;
     stopGraph = drawGraph(document.getElementById("map-box"), fullView(), { center: HOME, full: true, onClick: goTo });
