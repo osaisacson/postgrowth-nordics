@@ -79,6 +79,15 @@ relations: [
 - `section` values link to the entry in that tab whose title matches exactly (upper/lower case doesn't matter).
   Values that don't match anything are shown as plain text.
 
+## Password box
+
+While the site isn't public, `gate.js` shows a password box before anything else. Whoever types the
+right password is let in and remembered on that device. Set the password with `passwordHash` in
+`config.js` (the comment there shows how to make the hash), and set it to `""` to make the site public.
+
+This is a soft gate, not real security: a static site can't truly hide its files, and the sheet is
+open to anyone with its link. It keeps the site out of casual view, nothing more.
+
 ## Helping people enter data in the right format
 
 `sheet-setup.gs` adds dropdowns that pick from earlier entries (topics, countries, people, nodes),
