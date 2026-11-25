@@ -13,6 +13,17 @@ window.SITE_CONFIG = {
   // The long ID in the sheet's URL: docs.google.com/spreadsheets/d/<THIS PART>/edit
   sheetId: "1EwwjCkRdt2_nlANZE8w-XMKT0FVkQz_VPKJEVKkPELI",
 
+  // Password box shown before the site (see gate.js). This is a soft gate to keep the site
+  // out of casual view while it isn't public yet: it is NOT real security, since the site's
+  // files and the sheet stay readable to anyone who looks for them.
+  // The value is the SHA-256 hash of the password, so the password itself isn't in the source.
+  // Current password: the one shared with the network. To change it, run this in a browser
+  // console and paste the result here:
+  //   crypto.subtle.digest("SHA-256", new TextEncoder().encode("new password"))
+  //     .then(b => console.log([...new Uint8Array(b)].map(x => x.toString(16).padStart(2, "0")).join("")))
+  // To switch the gate off and make the site public, set this to "" (or delete the line).
+  passwordHash: "1c8bfe8f801d79745c4631d09fff36c82aa37fc4cce4fc946683d7b336b63032",
+
   // The About page (the front page). Plain HTML is allowed here, because this file is
   // not editable by the public. Every <h2>, <h3> and <h4> appears in the "On this page" list.
   intro: `
